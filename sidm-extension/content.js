@@ -309,6 +309,7 @@
   // ==========================================
   // IDM-Style Live Download Progress Card
   // ==========================================
+  const SIDM_BRIDGE_HTTP = "http://127.0.0.1:45678";
   let currentActiveTaskId = null;
 
   function showLiveDownloadCard(taskId, url) {
@@ -335,7 +336,7 @@
           <span>⚡ SIDM Turbo Downloader</span>
         </div>
         <div class="sidm-card-actions">
-          <a class="sidm-card-link" href="http://127.0.0.1:45678" target="_blank" title="Open SIDM Dashboard">🌐 Dashboard</a>
+          <a class="sidm-card-link" href="${SIDM_BRIDGE_HTTP}" target="_blank" title="Open SIDM Dashboard">🌐 Dashboard</a>
           <span class="sidm-card-close" title="Dismiss">&times;</span>
         </div>
       </div>
@@ -366,13 +367,33 @@
   }
 
   function fetchTaskStatus(taskId) {
-    chrome.runtime.sendMessage(
-      { action: "GET_TASK_STATUS", taskId: taskId },
-      (res) => {
-        if (!res || !res.success || !res.task) return;
-        updateLiveCard(res.task);
-      }
-    );
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
+      try {
+        chrome.runtime.sendMessage(
+          { action: "GET_TASK_STATUS", taskId: taskId },
+          (res) => {
+            if (chrome.runtime.lastError || !res || !res.task) {
+              directBridgeFetchStatus(taskId);
+              return;
+            }
+            updateLiveCard(res.task);
+          }
+        );
+        return;
+      } catch (e) {}
+    }
+    directBridgeFetchStatus(taskId);
+  }
+
+  function directBridgeFetchStatus(taskId) {
+    const url = taskId ? `${SIDM_BRIDGE_HTTP}/api/downloads/${taskId}` : `${SIDM_BRIDGE_HTTP}/api/downloads`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        const task = taskId ? data.task : (Array.isArray(data) && data.length > 0 ? data[0] : null);
+        if (task) updateLiveCard(task);
+      })
+      .catch(() => {});
   }
 
   function updateLiveCard(task) {
@@ -419,35 +440,89 @@
     showLiveDownloadCard(null, url);
     showToast("info", "🚀 Connecting to SIDM Engine (32 Turbo Threads)...");
 
-    chrome.runtime.sendMessage(
-      {
-        action: "SEND_TO_SIDM",
-        payload: {
-          url: url,
-          format_id: formatId,
-          connections: 32,
-          cookies: document.cookie || ""
+    const payload = {
+      url: url,
+      format_id: formatId,
+      connections: 32,
+      cookies: document.cookie || ""
+    };
+
+    sendDownloadRequest(payload, (res) => {
+      if (res && res.success && res.data && res.data.success) {
+        showToast("success", "✅ Download started in SIDM!");
+        const taskId = res.data.task ? res.data.task.id : null;
+        if (taskId) {
+          currentActiveTaskId = taskId;
         }
-      },
-      (res) => {
-        if (res && res.success && res.data && res.data.success) {
-          showToast("success", "✅ Download started in SIDM!");
-          const taskId = res.data.task ? res.data.task.id : null;
-          if (taskId) {
-            currentActiveTaskId = taskId;
-          }
-          if (onSuccess) onSuccess();
-        } else {
-          const errMsg = (res && res.error) ? res.error : "Make sure SIDM Engine is running! Run ./start_sidm.sh";
-          showToast("error", `❌ ${errMsg}`);
-          const speedEl = document.getElementById("sidmCardSpeed");
-          if (speedEl) {
-            speedEl.innerHTML = `<span style="color: #f87171;">❌ ${errMsg}</span>`;
-          }
-          if (onError) onError();
+        if (onSuccess) onSuccess();
+      } else {
+        const errMsg = (res && res.error) ? res.error : "Make sure SIDM Engine is running! Run ./start_sidm.sh";
+        showToast("error", `❌ ${errMsg}`);
+        const speedEl = document.getElementById("sidmCardSpeed");
+        if (speedEl) {
+          speedEl.innerHTML = `<span style="color: #f87171;">❌ ${errMsg}</span>`;
         }
+        if (onError) onError();
       }
-    );
+    });
+  }
+
+  function sendDownloadRequest(payload, callback) {
+    let handled = false;
+
+    // Method A: Chrome Runtime messaging
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
+      try {
+        chrome.runtime.sendMessage(
+          { action: "SEND_TO_SIDM", payload: payload },
+          (res) => {
+            if (chrome.runtime.lastError || !res) {
+              console.warn("SIDM: Runtime message fallback to direct fetch...", chrome.runtime.lastError);
+              if (!handled) {
+                handled = true;
+                directBridgeSend(payload, callback);
+              }
+              return;
+            }
+            if (!handled) {
+              handled = true;
+              callback(res);
+            }
+          }
+        );
+        return;
+      } catch (err) {
+        console.warn("SIDM: Extension context invalidated, switching to direct fetch...", err);
+      }
+    }
+
+    // Method B: Direct HTTP Fetch fallback (works even if extension reloaded without page refresh)
+    if (!handled) {
+      handled = true;
+      directBridgeSend(payload, callback);
+    }
+  }
+
+  function directBridgeSend(payload, callback) {
+    fetch(`${SIDM_BRIDGE_HTTP}/api/downloads`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          callback({ success: false, error: data.error || `Server HTTP ${res.status}` });
+        } else {
+          callback({ success: true, data: { success: true, task: data.task || data } });
+        }
+      })
+      .catch((err) => {
+        callback({
+          success: false,
+          error: "SIDM Engine is offline! Make sure './start_sidm.sh' is running in your terminal."
+        });
+      });
   }
 
   function showToast(type, text) {
@@ -465,11 +540,13 @@
     }, 4500);
   }
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.action === "SHOW_TOAST") {
-      showToast(msg.type, msg.message);
-    }
-  });
+  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.action === "SHOW_TOAST") {
+        showToast(msg.type, msg.message);
+      }
+    });
+  }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
