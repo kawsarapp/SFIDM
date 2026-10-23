@@ -1,21 +1,33 @@
 // SIDM Universal Video Sniffer & Floating Button Injector
-// Works on YouTube, Facebook, TikTok, Instagram, Twitter/X, and ANY website with HTML5 Video
+// Bulletproof support for YouTube, Facebook (Feed, Watch, Reels, Shorts), TikTok, and HTML5 video
 
 (function () {
-  const PROCESSED_ATTR = "data-sidm-attached";
   let activeDropdown = null;
 
   function init() {
-    scanAndAttachVideos();
+    scanAndAttach();
 
-    // DOM Observer for SPA navigation (YouTube, Facebook feed scroll, dynamic modals)
+    // DOM Observer for SPA navigation & infinite scroll (Facebook Feed, Reels, YouTube Shorts)
     const observer = new MutationObserver(() => {
-      scanAndAttachVideos();
+      scanAndAttach();
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Periodic safety check for lazy-loaded players
-    setInterval(scanAndAttachVideos, 2000);
+    // Periodic safety sweep
+    setInterval(scanAndAttach, 1500);
+
+    // Reactive: whenever ANY video starts playing, inject instantly!
+    document.addEventListener("play", (e) => {
+      if (e.target && e.target.tagName === "VIDEO") {
+        handleVideoPlay(e.target);
+      }
+    }, true);
+
+    document.addEventListener("playing", (e) => {
+      if (e.target && e.target.tagName === "VIDEO") {
+        handleVideoPlay(e.target);
+      }
+    }, true);
 
     // Global click listener to close dropdowns
     document.addEventListener("click", () => {
@@ -26,89 +38,154 @@
     });
   }
 
-  function scanAndAttachVideos() {
+  function handleVideoPlay(video) {
+    const isFacebook = location.hostname.includes("facebook.com");
+    const isYouTube = location.hostname.includes("youtube.com");
+
+    if (isYouTube) {
+      attachYouTube();
+      return;
+    }
+
+    if (isFacebook) {
+      attachFacebookVideo(video);
+      return;
+    }
+
+    attachGenericSingleVideo(video);
+  }
+
+  function scanAndAttach() {
     const isYouTube = location.hostname.includes("youtube.com");
     const isFacebook = location.hostname.includes("facebook.com");
 
     if (isYouTube) {
       attachYouTube();
+      return;
     }
 
     if (isFacebook) {
-      attachFacebook();
+      attachFacebookAll();
+      return;
     }
 
-    // Generic HTML5 videos across any webpage
     attachGenericVideos();
   }
 
-  // --- 1. YouTube Dedicated Handler ---
+  // ==========================================
+  // 1. YouTube Handler (Watch & Shorts)
+  // ==========================================
   function attachYouTube() {
-    // Normal watch player
     const ytPlayer = document.querySelector("#movie_player") || document.querySelector(".html5-video-player");
-    if (ytPlayer && !ytPlayer.hasAttribute(PROCESSED_ATTR)) {
-      ytPlayer.setAttribute(PROCESSED_ATTR, "true");
+    if (ytPlayer && !ytPlayer.querySelector(".sidm-floating-badge")) {
       createBadge(ytPlayer, () => window.location.href, "youtube");
     }
 
-    // YouTube Shorts player
-    const shortsPlayers = document.querySelectorAll("ytd-shorts-player, #shorts-player");
+    const shortsPlayers = document.querySelectorAll("ytd-shorts-player, #shorts-player, .ytd-reel-video-renderer");
     shortsPlayers.forEach((sp) => {
-      if (!sp.hasAttribute(PROCESSED_ATTR)) {
-        sp.setAttribute(PROCESSED_ATTR, "true");
+      if (!sp.querySelector(".sidm-floating-badge")) {
         createBadge(sp, () => window.location.href, "youtube-shorts");
       }
     });
   }
 
-  // --- 2. Facebook Dedicated Handler ---
-  function attachFacebook() {
-    const fbVideos = document.querySelectorAll("video");
-    fbVideos.forEach((vid) => {
-      if (vid.hasAttribute(PROCESSED_ATTR)) return;
-
-      const container = vid.closest('[role="dialog"]') ||
-                        vid.closest('[data-video-id]') ||
-                        vid.parentElement;
-
-      if (container && !container.querySelector(".sidm-floating-badge")) {
-        vid.setAttribute(PROCESSED_ATTR, "true");
-        createBadge(container, () => {
-          const link = container.closest("a[href*='/watch'], a[href*='/reel'], a[href*='/videos/']");
-          return link ? link.href : window.location.href;
-        }, "facebook");
-      }
+  // ==========================================
+  // 2. Facebook Handler (Reels, Feed, Watch)
+  // ==========================================
+  function attachFacebookAll() {
+    const videos = document.querySelectorAll("video");
+    videos.forEach((vid) => {
+      attachFacebookVideo(vid);
     });
   }
 
-  // --- 3. Generic HTML5 Video Handler ---
+  function attachFacebookVideo(vid) {
+    const container = getVisualVideoContainer(vid);
+    if (!container || container.querySelector(".sidm-floating-badge")) return;
+
+    createBadge(container, () => getFacebookVideoUrl(vid, container), "facebook");
+  }
+
+  function getFacebookVideoUrl(vid, container) {
+    // 1. If currently on a Reel page (/reel/123456)
+    if (location.pathname.includes("/reel") || location.pathname.includes("/watch")) {
+      return window.location.href;
+    }
+
+    // 2. Look for post permalink in closest article / container
+    const article = vid.closest('[role="article"]') || container.closest('[role="article"]') || container;
+    const link = article.querySelector("a[href*='/reel/'], a[href*='/watch'], a[href*='/videos/']");
+    if (link && link.href) {
+      return link.href;
+    }
+
+    // 3. Fallback to direct video src if available
+    if (vid.src && !vid.src.startsWith("blob:")) {
+      return vid.src;
+    }
+
+    return window.location.href;
+  }
+
+  // ==========================================
+  // 3. Generic HTML5 Videos
+  // ==========================================
   function attachGenericVideos() {
     const allVideos = document.querySelectorAll("video");
-    allVideos.forEach((video) => {
-      if (video.hasAttribute(PROCESSED_ATTR)) return;
-
-      const rect = video.getBoundingClientRect();
-      if (rect.width < 140 || rect.height < 100) return;
-
-      const parent = video.parentElement;
-      if (!parent || parent.querySelector(".sidm-floating-badge")) return;
-
-      video.setAttribute(PROCESSED_ATTR, "true");
-
-      createBadge(parent, () => {
-        if (video.src && !video.src.startsWith("blob:")) {
-          return video.src;
-        }
-        const source = video.querySelector("source");
-        if (source && source.src && !source.src.startsWith("blob:")) {
-          return source.src;
-        }
-        return window.location.href;
-      }, "generic");
+    allVideos.forEach((vid) => {
+      attachGenericSingleVideo(vid);
     });
   }
 
-  // --- Badge Creator ---
+  function attachGenericSingleVideo(video) {
+    const rect = video.getBoundingClientRect();
+    if (rect.width < 140 || rect.height < 100) return;
+
+    const container = getVisualVideoContainer(video);
+    if (!container || container.querySelector(".sidm-floating-badge")) return;
+
+    createBadge(container, () => {
+      if (video.src && !video.src.startsWith("blob:")) {
+        return video.src;
+      }
+      const source = video.querySelector("source");
+      if (source && source.src && !source.src.startsWith("blob:")) {
+        return source.src;
+      }
+      return window.location.href;
+    }, "generic");
+  }
+
+  // ==========================================
+  // Container Helper (Finds the visible player box)
+  // ==========================================
+  function getVisualVideoContainer(vid) {
+    let parent = vid.parentElement;
+    let best = parent;
+    let depth = 0;
+
+    while (parent && depth < 5) {
+      const tag = parent.tagName.toUpperCase();
+      if (tag === "BODY" || tag === "HTML") break;
+
+      const role = parent.getAttribute("role");
+      if (role === "dialog" || role === "main") break;
+
+      const rect = parent.getBoundingClientRect();
+      if (rect.width >= 160 && rect.height >= 120) {
+        best = parent;
+        break;
+      }
+      parent = parent.parentElement;
+      depth++;
+    }
+
+    return best || vid.parentElement;
+  }
+
+  // ==========================================
+  // Badge Component Creation
+  // ==========================================
   function createBadge(container, getTargetUrl, platform) {
     if (container.querySelector(".sidm-floating-badge")) return;
 
@@ -125,7 +202,7 @@
           <span class="sidm-icon">⚡</span>
           <span class="sidm-label">Download Video</span>
         </div>
-        <div class="sidm-btn-arrow" title="Choose Resolution (4K, 720p, MP3)">
+        <div class="sidm-btn-arrow" title="Choose Resolution (8K, 4K, 720p, MP3)">
           <span class="sidm-arrow">▼</span>
         </div>
       </div>
@@ -168,7 +245,7 @@
     const btnArrow = badge.querySelector(".sidm-btn-arrow");
     const dropdown = badge.querySelector(".sidm-dropdown");
 
-    // 1-Click Download when clicking main button
+    // 1-Click direct download
     btnMain.addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
@@ -200,7 +277,7 @@
       activeDropdown = isOpen ? null : dropdown;
     });
 
-    // Dropdown items click
+    // Dropdown item click
     badge.querySelectorAll(".sidm-item").forEach((item) => {
       item.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -259,7 +336,6 @@
     }, 4500);
   }
 
-  // Listen to background toast events
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === "SHOW_TOAST") {
       showToast(msg.type, msg.message);
