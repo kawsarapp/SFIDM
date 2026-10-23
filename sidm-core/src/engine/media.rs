@@ -7,10 +7,34 @@ use tokio::process::Command;
 
 pub struct MediaEngine;
 
+fn get_ytdlp_bin() -> String {
+    let candidates = [
+        "sidm-core/bin/yt-dlp",
+        "./bin/yt-dlp",
+        "bin/yt-dlp",
+        "./yt-dlp",
+    ];
+    for c in &candidates {
+        if std::path::Path::new(c).exists() {
+            return c.to_string();
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let p = parent.join("bin").join("yt-dlp");
+            if p.exists() {
+                return p.to_string_lossy().to_string();
+            }
+        }
+    }
+    "yt-dlp".to_string()
+}
+
 impl MediaEngine {
-    /// Inspect media formats using yt-dlp
+    /// Inspect media formats using bundled or system yt-dlp
     pub async fn inspect(url: &str, cookies: Option<&str>) -> Result<MediaInspectResult> {
-        let mut cmd = Command::new("yt-dlp");
+        let bin = get_ytdlp_bin();
+        let mut cmd = Command::new(&bin);
         cmd.arg("--dump-single-json")
             .arg("--no-warnings")
             .arg("--no-playlist")
@@ -193,7 +217,8 @@ impl MediaEngine {
     where
         F: Fn(u64, u64, Vec<ChunkInfo>) + Send + Sync + 'static,
     {
-        let mut cmd = Command::new("yt-dlp");
+        let bin = get_ytdlp_bin();
+        let mut cmd = Command::new(&bin);
 
         // Format selector mapping
         let format_arg = match format_id.unwrap_or("best_1080p") {
@@ -209,7 +234,13 @@ impl MediaEngine {
             .arg("--merge-output-format")
             .arg("mp4")
             .arg("-N")
-            .arg("8") // 8 parallel fragment connections for speed!
+            .arg("16") // 16 parallel fragment streams for extreme speed!
+            .arg("--buffer-size")
+            .arg("16M")
+            .arg("--http-chunk-size")
+            .arg("10M")
+            .arg("--concurrent-fragments")
+            .arg("16")
             .arg("--newline")
             .arg("--progress")
             .arg("-o")

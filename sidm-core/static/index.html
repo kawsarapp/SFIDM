@@ -101,8 +101,10 @@
             <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
           </div>
           <div class="text-[11px] text-slate-400 flex flex-col gap-1">
-            <div class="flex justify-between"><span>Threads:</span> <span class="font-mono text-slate-300">16 Parallel</span></div>
+            <div class="flex justify-between"><span>Max Threads:</span> <span class="font-mono text-amber-400 font-semibold">64 Parallel</span></div>
+            <div class="flex justify-between"><span>Work Stealing:</span> <span class="text-sky-400 font-semibold">Dynamic Auto</span></div>
             <div class="flex justify-between"><span>Zero-Copy:</span> <span class="text-emerald-400">Active</span></div>
+            <div class="flex justify-between"><span>Block Buffer:</span> <span class="text-slate-300">512 KB Bulk</span></div>
             <div class="flex justify-between"><span>Local Port:</span> <span class="font-mono text-slate-300">45678</span></div>
           </div>
         </div>
@@ -170,11 +172,12 @@
             <input type="text" id="modalFilenameInput" placeholder="Auto-detected if blank" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
           </div>
           <div>
-            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Parallel Connections</label>
-            <select id="modalConnections" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none">
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Parallel Connections (Speed Accelerator)</label>
+            <select id="modalConnections" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
               <option value="8">8 Connections (Standard)</option>
-              <option value="16" selected>16 Connections (High-Speed Turbo)</option>
-              <option value="32">32 Connections (Extreme)</option>
+              <option value="16">16 Connections (Turbo Speed)</option>
+              <option value="32" selected>🚀 32 Connections (Extreme Turbo Boost)</option>
+              <option value="64">⚡ 64 Connections (Gigabit Ultra Pipe)</option>
               <option value="1">1 Connection (Single Stream)</option>
             </select>
           </div>

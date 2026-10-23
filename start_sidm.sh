@@ -2,12 +2,17 @@
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN="$DIR/sidm-core/target/debug/sidm-core"
+BIN="$DIR/sidm-core/target/release/sidm-core"
 
 if [ ! -f "$BIN" ]; then
-    echo "⚡ Building SIDM Core Engine..."
+    BIN="$DIR/sidm-core/target/debug/sidm-core"
+fi
+
+if [ ! -f "$BIN" ]; then
+    echo "⚡ Building SIDM Core Engine (Optimized Release)..."
     cd "$DIR/sidm-core"
-    cargo build
+    cargo build --release
+    BIN="$DIR/sidm-core/target/release/sidm-core"
 fi
 
 echo "=================================================="

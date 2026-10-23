@@ -15,7 +15,7 @@ impl Default for AppConfig {
         Self {
             default_download_dir: download_dir,
             default_connections: 16,
-            max_connections: 32,
+            max_connections: 64, // Upgraded to 64 extreme connections
             server_host: "127.0.0.1".to_string(),
             server_port: 45678,
         }

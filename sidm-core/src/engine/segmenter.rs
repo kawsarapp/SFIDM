@@ -7,12 +7,25 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::watch;
+use tokio::sync::{watch, RwLock};
+
+const WRITE_BUFFER_SIZE: usize = 512 * 1024; // 512 KB bulk write buffer
+const MIN_STEAL_THRESHOLD: u64 = 3 * 1024 * 1024; // 3 MB minimum to warrant dynamic work stealing
 
 pub struct ProbeResult {
     pub total_bytes: Option<u64>,
     pub supports_range: bool,
     pub suggested_filename: Option<String>,
+}
+
+#[derive(Clone)]
+struct DynamicChunkState {
+    pub index: usize,
+    pub start_byte: u64,
+    pub end_byte: u64,
+    pub current_offset: u64,
+    pub downloaded_bytes: u64,
+    pub active: bool,
 }
 
 pub struct Segmenter {
@@ -22,8 +35,11 @@ pub struct Segmenter {
 impl Segmenter {
     pub fn new() -> Self {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .pool_max_idle_per_host(32)
+            .tcp_nodelay(true) // Disable Nagle's algorithm for zero packet delay
+            .pool_max_idle_per_host(64)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .tcp_keepalive(Duration::from_secs(30))
+            .timeout(Duration::from_secs(60))
             .build()
             .unwrap_or_default();
 
@@ -35,7 +51,7 @@ impl Segmenter {
         let mut headers = HeaderMap::new();
         headers.insert(
             USER_AGENT,
-            HeaderValue::from_static("Mozilla/5.0 (X11; Linux x86_64) SIDM/1.0"),
+            HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 SIDM/2.0 Turbo"),
         );
         if let Some(cookie_str) = cookies {
             if let Ok(val) = HeaderValue::from_str(cookie_str) {
@@ -100,7 +116,7 @@ impl Segmenter {
         })
     }
 
-    /// Execute high-speed segmented download with Zero-Copy Pre-Allocation
+    /// Execute Extreme Turbo segmented download with Zero-Copy Pre-Allocation & Work Stealing
     pub async fn download<F>(
         &self,
         url: &str,
@@ -115,34 +131,33 @@ impl Segmenter {
     where
         F: Fn(u64, u64, Vec<ChunkInfo>) + Send + Sync + 'static,
     {
-        let conn_count = if supports_range && total_bytes.is_some() && total_bytes.unwrap() > 1024 * 1024 {
-            connections.clamp(2, 32)
+        let conn_count = if supports_range && total_bytes.is_some() && total_bytes.unwrap() > 512 * 1024 {
+            connections.clamp(2, 64)
         } else {
             1
         };
 
         let total_size = total_bytes.unwrap_or(0);
 
-        // Step 1: Zero-Copy Pre-Allocation (IDM freeze bypass)
+        // Step 1: Zero-Copy Pre-Allocation (0ms wait at 100%)
         {
             let file = std::fs::File::create(save_path)
                 .with_context(|| format!("Failed to create destination file {:?}", save_path))?;
             if total_size > 0 {
-                // Pre-allocate the exact file size so chunks can be written anywhere without end-of-download copy
                 let _ = file.set_len(total_size);
             }
         }
 
-        // Single connection fallback if server doesn't support ranges or size is unknown
+        // Single stream fallback if server doesn't support ranges
         if conn_count == 1 || total_size == 0 {
             return self
                 .download_single_stream(url, save_path, total_size, cookies, pause_rx, on_progress)
                 .await;
         }
 
-        // Calculate chunk byte boundaries
+        // Initial chunk distribution
         let chunk_size = total_size / (conn_count as u64);
-        let mut chunks = Vec::with_capacity(conn_count);
+        let mut initial_chunks = Vec::with_capacity(conn_count);
 
         for i in 0..conn_count {
             let start_byte = i as u64 * chunk_size;
@@ -152,29 +167,30 @@ impl Segmenter {
                 (i as u64 + 1) * chunk_size - 1
             };
 
-            chunks.push(ChunkInfo {
+            initial_chunks.push(DynamicChunkState {
                 index: i,
                 start_byte,
                 end_byte,
+                current_offset: start_byte,
                 downloaded_bytes: 0,
                 active: true,
             });
         }
 
         let downloaded_total = Arc::new(AtomicU64::new(0));
-        let chunks_state = Arc::new(tokio::sync::RwLock::new(chunks.clone()));
+        let chunk_states = Arc::new(RwLock::new(initial_chunks));
         let is_cancelled = Arc::new(AtomicBool::new(false));
 
-        // Spawn progress reporting loop
+        // Background high-frequency progress monitor
         let progress_downloaded = downloaded_total.clone();
-        let progress_chunks = chunks_state.clone();
+        let progress_chunks = chunk_states.clone();
         let progress_cancelled = is_cancelled.clone();
         let progress_handle = tokio::spawn(async move {
             let mut last_bytes = 0u64;
             let mut last_tick = Instant::now();
 
             loop {
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(300)).await;
                 if progress_cancelled.load(Ordering::Relaxed) {
                     break;
                 }
@@ -192,8 +208,19 @@ impl Segmenter {
                 last_bytes = current_bytes;
                 last_tick = now;
 
-                let current_chunks = progress_chunks.read().await.clone();
-                on_progress(current_bytes, speed, current_chunks);
+                let states = progress_chunks.read().await;
+                let ui_chunks: Vec<ChunkInfo> = states
+                    .iter()
+                    .map(|c| ChunkInfo {
+                        index: c.index,
+                        start_byte: c.start_byte,
+                        end_byte: c.end_byte,
+                        downloaded_bytes: c.downloaded_bytes,
+                        active: c.active,
+                    })
+                    .collect();
+
+                on_progress(current_bytes, speed, ui_chunks);
 
                 if total_size > 0 && current_bytes >= total_size {
                     break;
@@ -201,82 +228,169 @@ impl Segmenter {
             }
         });
 
-        // Spawn worker tasks for each connection chunk
+        // Launch concurrent workers with Dynamic Work Stealing
         let mut worker_handles = Vec::new();
 
-        for chunk in chunks {
+        for worker_id in 0..conn_count {
             let client = self.client.clone();
             let url = url.to_string();
             let cookies = cookies.map(|s| s.to_string());
             let path = save_path.to_path_buf();
             let downloaded_total = downloaded_total.clone();
-            let chunks_state = chunks_state.clone();
+            let chunk_states = chunk_states.clone();
             let mut pause_rx = pause_rx.clone();
 
             let handle = tokio::spawn(async move {
-                let mut chunk_file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .open(&path)
-                    .with_context(|| format!("Worker failed to open {:?}", path))?;
-
-                // Seek to this chunk's start byte
-                chunk_file.seek(SeekFrom::Start(chunk.start_byte))?;
-
-                let range_header = format!("bytes={}-{}", chunk.start_byte, chunk.end_byte);
-                let mut req = client.get(&url).header(RANGE, range_header);
-
-                if let Some(cookie_str) = &cookies {
-                    req = req.header(reqwest::header::COOKIE, cookie_str);
-                }
-
-                let resp = req.send().await?;
-                if !resp.status().is_success() {
-                    return Err(anyhow!("Chunk {} HTTP error: {}", chunk.index, resp.status()));
-                }
-
-                let mut stream = resp.bytes_stream();
-                let mut chunk_downloaded = 0u64;
-
-                while let Some(item) = stream.next().await {
+                // Outer loop: continuously execute assigned chunk or steal from the slowest chunk
+                loop {
                     // Check pause
                     if *pause_rx.borrow_and_update() {
                         return Err(anyhow!("Download paused"));
                     }
 
-                    let bytes = item?;
-                    let len = bytes.len() as u64;
+                    // Get or steal chunk
+                    let assignment = {
+                        let mut states = chunk_states.write().await;
 
-                    chunk_file.write_all(&bytes)?;
-                    chunk_downloaded += len;
-                    downloaded_total.fetch_add(len, Ordering::Relaxed);
+                        // First try worker's own initial slot
+                        if let Some(c) = states.get_mut(worker_id) {
+                            if c.active && c.current_offset <= c.end_byte {
+                                Some((c.index, c.current_offset, c.end_byte))
+                            } else {
+                                // Dynamic Work Stealing: Find slowest/largest chunk with remaining > MIN_STEAL_THRESHOLD
+                                let mut best_candidate: Option<(usize, u64)> = None;
+                                for item in states.iter() {
+                                    if item.active && item.end_byte > item.current_offset {
+                                        let remaining = item.end_byte - item.current_offset;
+                                        if remaining >= MIN_STEAL_THRESHOLD {
+                                            if let Some((_, best_rem)) = best_candidate {
+                                                if remaining > best_rem {
+                                                    best_candidate = Some((item.index, remaining));
+                                                }
+                                            } else {
+                                                best_candidate = Some((item.index, remaining));
+                                            }
+                                        }
+                                    }
+                                }
 
-                    // Update chunk progress periodically
-                    if chunk_downloaded % (128 * 1024) < len {
-                        if let Ok(mut state) = chunks_state.try_write() {
-                            if let Some(c) = state.get_mut(chunk.index) {
-                                c.downloaded_bytes = chunk_downloaded;
+                                if let Some((target_idx, remaining)) = best_candidate {
+                                    let half = remaining / 2;
+                                    let old_end = states[target_idx].end_byte;
+                                    let split_point = states[target_idx].current_offset + half;
+
+                                    // Shrink the target chunk
+                                    states[target_idx].end_byte = split_point;
+
+                                    // Create a new stolen chunk for this worker
+                                    let new_idx = states.len();
+                                    states.push(DynamicChunkState {
+                                        index: new_idx,
+                                        start_byte: split_point + 1,
+                                        end_byte: old_end,
+                                        current_offset: split_point + 1,
+                                        downloaded_bytes: 0,
+                                        active: true,
+                                    });
+
+                                    Some((new_idx, split_point + 1, old_end))
+                                } else {
+                                    None
+                                }
                             }
+                        } else {
+                            None
+                        }
+                    };
+
+                    let (chunk_idx, range_start, range_end) = match assignment {
+                        Some(a) => a,
+                        None => break, // No more work to steal, worker can rest!
+                    };
+
+                    if range_start > range_end {
+                        let mut states = chunk_states.write().await;
+                        if let Some(c) = states.get_mut(chunk_idx) {
+                            c.active = false;
+                        }
+                        continue;
+                    }
+
+                    // Open file handle with seek
+                    let mut chunk_file = std::fs::OpenOptions::new()
+                        .write(true)
+                        .open(&path)
+                        .with_context(|| format!("Worker failed to open {:?}", path))?;
+
+                    chunk_file.seek(SeekFrom::Start(range_start))?;
+
+                    let range_header = format!("bytes={}-{}", range_start, range_end);
+                    let mut req = client.get(&url).header(RANGE, range_header);
+
+                    if let Some(cookie_str) = &cookies {
+                        req = req.header(reqwest::header::COOKIE, cookie_str);
+                    }
+
+                    let resp = req.send().await?;
+                    if !resp.status().is_success() {
+                        return Err(anyhow!("Chunk {} HTTP error: {}", chunk_idx, resp.status()));
+                    }
+
+                    let mut stream = resp.bytes_stream();
+                    let mut write_buf = Vec::with_capacity(WRITE_BUFFER_SIZE);
+                    let mut chunk_downloaded = 0u64;
+
+                    while let Some(item) = stream.next().await {
+                        if *pause_rx.borrow_and_update() {
+                            return Err(anyhow!("Download paused"));
+                        }
+
+                        let bytes = item?;
+                        let len = bytes.len() as u64;
+
+                        write_buf.extend_from_slice(&bytes);
+                        chunk_downloaded += len;
+                        downloaded_total.fetch_add(len, Ordering::Relaxed);
+
+                        // 512KB Block-Buffered Disk Flush (Bypasses disk thrashing)
+                        if write_buf.len() >= WRITE_BUFFER_SIZE {
+                            chunk_file.write_all(&write_buf)?;
+                            write_buf.clear();
+
+                            // Update chunk offset
+                            if let Ok(mut states) = chunk_states.try_write() {
+                                if let Some(c) = states.get_mut(chunk_idx) {
+                                    c.current_offset = range_start + chunk_downloaded;
+                                    c.downloaded_bytes = chunk_downloaded;
+                                }
+                            }
+                        }
+                    }
+
+                    // Flush any remaining buffered bytes
+                    if !write_buf.is_empty() {
+                        chunk_file.write_all(&write_buf)?;
+                        write_buf.clear();
+                    }
+                    chunk_file.flush()?;
+
+                    // Mark chunk completed
+                    {
+                        let mut states = chunk_states.write().await;
+                        if let Some(c) = states.get_mut(chunk_idx) {
+                            c.downloaded_bytes = chunk_downloaded;
+                            c.active = false;
                         }
                     }
                 }
 
-                // Final chunk update
-                {
-                    let mut state = chunks_state.write().await;
-                    if let Some(c) = state.get_mut(chunk.index) {
-                        c.downloaded_bytes = chunk_downloaded;
-                        c.active = false;
-                    }
-                }
-
-                chunk_file.flush()?;
                 Ok::<(), anyhow::Error>(())
             });
 
             worker_handles.push(handle);
         }
 
-        // Wait for all chunk workers to complete
+        // Wait for all workers to finish
         let mut first_error = None;
         for handle in worker_handles {
             match handle.await {
@@ -304,7 +418,7 @@ impl Segmenter {
         Ok(())
     }
 
-    /// Single stream fallback download
+    /// Single stream fallback download with block buffering
     async fn download_single_stream<F>(
         &self,
         url: &str,
@@ -328,6 +442,7 @@ impl Segmenter {
         let mut downloaded = 0u64;
         let mut last_bytes = 0u64;
         let mut last_tick = Instant::now();
+        let mut write_buf = Vec::with_capacity(WRITE_BUFFER_SIZE);
 
         while let Some(chunk) = stream.next().await {
             if *pause_rx.borrow_and_update() {
@@ -335,11 +450,17 @@ impl Segmenter {
             }
 
             let bytes = chunk?;
-            file.write_all(&bytes)?;
-            downloaded += bytes.len() as u64;
+            let len = bytes.len() as u64;
+            write_buf.extend_from_slice(&bytes);
+            downloaded += len;
+
+            if write_buf.len() >= WRITE_BUFFER_SIZE {
+                file.write_all(&write_buf)?;
+                write_buf.clear();
+            }
 
             let now = Instant::now();
-            if now.duration_since(last_tick).as_millis() >= 400 {
+            if now.duration_since(last_tick).as_millis() >= 300 {
                 let elapsed = now.duration_since(last_tick).as_secs_f64();
                 let speed = if elapsed > 0.0 {
                     ((downloaded.saturating_sub(last_bytes)) as f64 / elapsed) as u64
@@ -363,6 +484,9 @@ impl Segmenter {
             }
         }
 
+        if !write_buf.is_empty() {
+            file.write_all(&write_buf)?;
+        }
         file.flush()?;
         Ok(())
     }

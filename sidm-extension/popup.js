@@ -67,21 +67,21 @@ downloadBtn.addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: url,
-        connections: 16
+        connections: 32
       })
     });
     const data = await res.json();
     if (data.success) {
       urlInput.value = "";
-      downloadBtn.textContent = "🚀 High-Speed Download (16 Thds)";
+      downloadBtn.textContent = "⚡ Extreme Turbo Download (32 Thds)";
       loadTasks();
     } else {
       alert("Error: " + (data.error || "Failed to start"));
-      downloadBtn.textContent = "🚀 High-Speed Download (16 Thds)";
+      downloadBtn.textContent = "⚡ Extreme Turbo Download (32 Thds)";
     }
   } catch (e) {
     alert("SIDM Engine is not reachable at " + SIDM_API);
-    downloadBtn.textContent = "🚀 High-Speed Download (16 Thds)";
+    downloadBtn.textContent = "⚡ Extreme Turbo Download (32 Thds)";
   }
 });
 
