@@ -1,0 +1,167 @@
+name: Build Cross-Platform Releases (Windows .exe & Linux .deb)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows (.exe Installer & Portable)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Download Windows yt-dlp.exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "bin"
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "bin/yt-dlp.exe"
+
+      - name: Build SIDM Core (Windows x64)
+        run: |
+          cd sidm-core
+          cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Prepare Binary for Inno Setup
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "sidm-core/target/release"
+          Copy-Item "sidm-core/target/x86_64-pc-windows-msvc/release/sidm-core.exe" "sidm-core/target/release/sidm-core.exe"
+
+      - name: Compile Inno Setup Installer (.exe)
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: installer/sidm_setup.iss
+
+      - name: Create Portable Zip Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "dist"
+          $portableDir = "dist/SIDM_v1.0.0_Portable"
+          New-Item -ItemType Directory -Force -Path $portableDir
+          Copy-Item "sidm-core/target/release/sidm-core.exe" "$portableDir/sidm-core.exe"
+          Copy-Item "bin/yt-dlp.exe" "$portableDir/yt-dlp.exe"
+          Copy-Item "start_sidm.bat" "$portableDir/start_sidm.bat"
+          Copy-Item "start_sidm.ps1" "$portableDir/start_sidm.ps1"
+          Copy-Item -Recurse "sidm-extension" "$portableDir/sidm-extension"
+          Copy-Item -Recurse "installer" "$portableDir/installer"
+          Compress-Archive -Path "$portableDir/*" -DestinationPath "dist/SIDM_v1.0.0_Portable_Windows_x64.zip" -Force
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-assets
+          path: |
+            dist/SIDM_v1.0.0_Setup.exe
+            dist/SIDM_v1.0.0_Portable_Windows_x64.zip
+
+  build-linux:
+    name: Build Linux (.deb Package & Tarball)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Download Linux yt-dlp
+        run: |
+          mkdir -p bin
+          curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp
+          chmod +x bin/yt-dlp
+
+      - name: Build SIDM Core (Linux x64)
+        run: |
+          cd sidm-core
+          cargo build --release
+
+      - name: Build Debian/Ubuntu Package (.deb)
+        run: |
+          chmod +x installer/build_deb.sh
+          ./installer/build_deb.sh
+
+      - name: Create Linux Tarball Package (.tar.gz)
+        run: |
+          mkdir -p dist/sidm_1.0.0_linux_x64
+          cp sidm-core/target/release/sidm-core dist/sidm_1.0.0_linux_x64/
+          cp bin/yt-dlp dist/sidm_1.0.0_linux_x64/
+          cp start_sidm.sh dist/sidm_1.0.0_linux_x64/
+          cp -r sidm-extension dist/sidm_1.0.0_linux_x64/
+          tar -czf dist/sidm_1.0.0_linux_x64.tar.gz -C dist sidm_1.0.0_linux_x64
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-assets
+          path: |
+            dist/sidm_1.0.0_amd64.deb
+            dist/sidm_1.0.0_linux_x64.tar.gz
+
+  publish-release:
+    name: Publish Multi-Platform GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-assets
+          path: dist-release
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-assets
+          path: dist-release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0
+          name: "⚡ SIDM v1.0.0 Official Release (Windows & Linux)"
+          body: |
+            ## ⚡ SIDM - Smart Internet Download Manager (v1.0.0)
+
+            The ultimate high-speed Internet Download Manager with modern multi-stream acceleration and universal video extraction.
+
+            ### 🚀 Highlights:
+            - **Extreme 32-64 Thread Multi-Segment Engine**: 16x speed acceleration surpassing traditional IDM.
+            - **Universal Browser Floating Button**: 1-click video downloader for YouTube, Facebook Reels/Videos, TikTok, and HTML5 video.
+            - **Draggable & Minimizable Live Progress Card**: Floating on-screen IDM progress card with live speed, ETA, and progress bar.
+            - **1-Click Open Folder & Video**: Direct integration with desktop file explorers & default media players.
+            - **Adobe Premiere Pro Ready**: Native H.264 MP4 & AAC 192kbps encoding for direct zero-conversion NLE video editing.
+            - **Auto-Browser Registration**: Seamlessly integrates with Google Chrome, Microsoft Edge, and Brave.
+            - **HWID Pro Licensing**: Lifetime & annual commercial licensing engine with 14-day Pro trial.
+
+            ---
+
+            ### 📥 Downloads:
+
+            #### 🪟 Windows (Windows 10 / 11):
+            - **`SIDM_v1.0.0_Setup.exe`** — **Recommended for Windows users**. Single-click installer with automatic browser integration.
+            - **`SIDM_v1.0.0_Portable_Windows_x64.zip`** — Standalone portable archive (no installation required).
+
+            #### 🐧 Linux (Ubuntu / Debian / Linux Mint / Pop!_OS):
+            - **`sidm_1.0.0_amd64.deb`** — **Recommended for Debian/Ubuntu users**. Double-click or `sudo dpkg -i sidm_1.0.0_amd64.deb`.
+            - **`sidm_1.0.0_linux_x64.tar.gz`** — Generic standalone Linux x64 portable archive.
+          draft: false
+          prerelease: false
+          files: |
+            dist-release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
