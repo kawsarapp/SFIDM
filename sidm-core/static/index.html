@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚡ SIDM - Smart Internet Download Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulseSlow {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .pulse-live {
+      animation: pulseSlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans select-none">
+
+  <!-- Top Navigation Bar -->
+  <header class="h-16 border-b border-slate-800 bg-slate-900/60 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <span class="text-xl">⚡</span>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-400 via-sky-300 to-amber-300 bg-clip-text text-transparent">
+          SIDM
+        </h1>
+        <p class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Smart Internet Download Manager</p>
+      </div>
+    </div>
+
+    <!-- Overall Speed Display -->
+    <div class="flex items-center gap-6">
+      <div class="hidden md:flex items-center gap-2 bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-full">
+        <div class="w-2 h-2 rounded-full bg-emerald-400 pulse-live"></div>
+        <span class="text-xs text-slate-400">Total Speed:</span>
+        <span id="totalSpeed" class="text-xs font-mono font-bold text-sky-400">0.00 MB/s</span>
+      </div>
+
+      <button id="openAddModalBtn" class="bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-md shadow-blue-600/30 flex items-center gap-2 transition-all">
+        <span>+</span> Add URL
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 border-r border-slate-800 bg-slate-900/30 p-4 flex flex-col gap-6 hidden md:flex">
+      <div>
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-3">Categories</span>
+        <nav class="mt-2 flex flex-col gap-1">
+          <button class="cat-btn active flex items-center justify-between px-3 py-2 rounded-lg bg-blue-600/20 text-blue-400 font-medium text-xs border border-blue-500/30" data-filter="all">
+            <span class="flex items-center gap-2"><span>📁</span> All Downloads</span>
+            <span id="countAll" class="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">0</span>
+          </button>
+          <button class="cat-btn flex items-center justify-between px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium text-xs transition" data-filter="video">
+            <span class="flex items-center gap-2"><span>🎬</span> Videos</span>
+            <span id="countVideo" class="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">0</span>
+          </button>
+          <button class="cat-btn flex items-center justify-between px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium text-xs transition" data-filter="audio">
+            <span class="flex items-center gap-2"><span>🎵</span> Audios</span>
+            <span id="countAudio" class="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">0</span>
+          </button>
+          <button class="cat-btn flex items-center justify-between px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium text-xs transition" data-filter="compressed">
+            <span class="flex items-center gap-2"><span>📦</span> Compressed</span>
+            <span id="countCompressed" class="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">0</span>
+          </button>
+          <button class="cat-btn flex items-center justify-between px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium text-xs transition" data-filter="document">
+            <span class="flex items-center gap-2"><span>📄</span> Documents</span>
+            <span id="countDoc" class="bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">0</span>
+          </button>
+        </nav>
+      </div>
+
+      <div class="mt-auto border-t border-slate-800 pt-4">
+        <div class="bg-slate-900 border border-slate-800/80 rounded-xl p-3 text-xs">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold text-slate-300">Engine Status</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          </div>
+          <div class="text-[11px] text-slate-400 flex flex-col gap-1">
+            <div class="flex justify-between"><span>Threads:</span> <span class="font-mono text-slate-300">16 Parallel</span></div>
+            <div class="flex justify-between"><span>Zero-Copy:</span> <span class="text-emerald-400">Active</span></div>
+            <div class="flex justify-between"><span>Local Port:</span> <span class="font-mono text-slate-300">45678</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Content Area -->
+    <main class="flex-1 flex flex-col bg-slate-950 p-6 overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-base font-bold text-slate-200">Active Queue</h2>
+        <div class="text-xs text-slate-400" id="queueSummary">0 items</div>
+      </div>
+
+      <!-- Task Cards List -->
+      <div id="taskList" class="flex flex-col gap-3">
+        <!-- Empty State -->
+        <div id="emptyState" class="border border-dashed border-slate-800 rounded-2xl p-12 flex flex-col items-center justify-center text-center">
+          <div class="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center text-3xl mb-4 text-slate-600">
+            ⚡
+          </div>
+          <h3 class="text-sm font-semibold text-slate-300 mb-1">No Active Downloads</h3>
+          <p class="text-xs text-slate-500 max-w-sm mb-4">
+            Click "+ Add URL" or use the SIDM Browser Extension on YouTube, Facebook, or any webpage to download at 16x speed.
+          </p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Add Download Modal -->
+  <div id="addModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+          <span>⚡</span> Add New Download
+        </h3>
+        <button id="closeAddModalBtn" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+      </div>
+
+      <div class="flex flex-col gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Download URL</label>
+          <div class="flex gap-2">
+            <input type="text" id="modalUrlInput" placeholder="https://..." class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+            <button id="inspectBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg font-medium transition">
+              🔍 Inspect
+            </button>
+          </div>
+        </div>
+
+        <!-- Video Quality Inspector Section (Hidden until inspected) -->
+        <div id="qualitySection" class="hidden flex flex-col gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center">
+            <span id="inspectTitle" class="text-xs font-semibold text-sky-400 truncate max-w-xs"></span>
+            <span id="inspectDuration" class="text-[10px] text-slate-500"></span>
+          </div>
+          <label class="text-[10px] text-slate-400">Select Resolution:</label>
+          <select id="qualitySelect" class="bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none">
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Custom File Name (Optional)</label>
+            <input type="text" id="modalFilenameInput" placeholder="Auto-detected if blank" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Parallel Connections</label>
+            <select id="modalConnections" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none">
+              <option value="8">8 Connections (Standard)</option>
+              <option value="16" selected>16 Connections (High-Speed Turbo)</option>
+              <option value="32">32 Connections (Extreme)</option>
+              <option value="1">1 Connection (Single Stream)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-slate-800 pt-3 mt-2">
+        <button id="cancelModalBtn" class="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800 transition">Cancel</button>
+        <button id="startDownloadBtn" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-5 py-2 rounded-lg shadow-lg shadow-blue-600/30 transition">
+          🚀 Start Download
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = "http://127.0.0.1:45678";
+    let tasks = [];
+    let currentFilter = "all";
+
+    // Modal elements
+    const addModal = document.getElementById("addModal");
+    const openAddModalBtn = document.getElementById("openAddModalBtn");
+    const closeAddModalBtn = document.getElementById("closeAddModalBtn");
+    const cancelModalBtn = document.getElementById("cancelModalBtn");
+    const modalUrlInput = document.getElementById("modalUrlInput");
+    const modalFilenameInput = document.getElementById("modalFilenameInput");
+    const modalConnections = document.getElementById("modalConnections");
+    const inspectBtn = document.getElementById("inspectBtn");
+    const qualitySection = document.getElementById("qualitySection");
+    const qualitySelect = document.getElementById("qualitySelect");
+    const inspectTitle = document.getElementById("inspectTitle");
+    const startDownloadBtn = document.getElementById("startDownloadBtn");
+
+    openAddModalBtn.onclick = () => { addModal.classList.remove("hidden"); modalUrlInput.focus(); };
+    closeAddModalBtn.onclick = cancelModalBtn.onclick = () => { addModal.classList.add("hidden"); resetModal(); };
+
+    function resetModal() {
+      modalUrlInput.value = "";
+      modalFilenameInput.value = "";
+      qualitySection.classList.add("hidden");
+      qualitySelect.innerHTML = "";
+    }
+
+    // Inspect media
+    inspectBtn.onclick = async () => {
+      const url = modalUrlInput.value.trim();
+      if (!url) return;
+      inspectBtn.textContent = "⏳...";
+      try {
+        const res = await fetch(`${API}/api/inspect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          inspectTitle.textContent = data.data.title;
+          qualitySelect.innerHTML = data.data.formats.map(f => `
+            <option value="${f.format_id}">${f.label}</option>
+          `).join("");
+          qualitySection.classList.remove("hidden");
+        } else {
+          alert("Media inspect note: " + (data.error || "Falling back to standard direct file download."));
+        }
+      } catch (e) {
+        alert("Failed to connect to inspection engine: " + e.message);
+      } finally {
+        inspectBtn.textContent = "🔍 Inspect";
+      }
+    };
+
+    // Start download
+    startDownloadBtn.onclick = async () => {
+      const url = modalUrlInput.value.trim();
+      if (!url) return;
+
+      const format_id = qualitySection.classList.contains("hidden") ? null : qualitySelect.value;
+      const file_name = modalFilenameInput.value.trim() || null;
+      const connections = parseInt(modalConnections.value, 10);
+
+      startDownloadBtn.textContent = "Starting...";
+      try {
+        const res = await fetch(`${API}/api/downloads`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, format_id, file_name, connections })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addModal.classList.add("hidden");
+          resetModal();
+          fetchTasks();
+        } else {
+          alert("Error: " + data.error);
+        }
+      } catch (e) {
+        alert("Could not start download: " + e.message);
+      } finally {
+        startDownloadBtn.textContent = "🚀 Start Download";
+      }
+    };
+
+    // Fetch tasks
+    async function fetchTasks() {
+      try {
+        const res = await fetch(`${API}/api/downloads`);
+        tasks = await res.json();
+        renderTasks();
+      } catch (e) {}
+    }
+
+    function renderTasks() {
+      const taskList = document.getElementById("taskList");
+      const emptyState = document.getElementById("emptyState");
+
+      let filtered = tasks;
+      if (currentFilter === "video") filtered = tasks.filter(t => t.file_name.match(/\.(mp4|mkv|webm|avi|mov)$/i) || t.download_type === "mediastream");
+      if (currentFilter === "audio") filtered = tasks.filter(t => t.file_name.match(/\.(mp3|wav|flac|m4a|aac)$/i));
+      if (currentFilter === "compressed") filtered = tasks.filter(t => t.file_name.match(/\.(zip|rar|7z|tar|gz|iso)$/i));
+      if (currentFilter === "document") filtered = tasks.filter(t => t.file_name.match(/\.(pdf|docx|xlsx|pptx|txt)$/i));
+
+      document.getElementById("countAll").textContent = tasks.length;
+      document.getElementById("countVideo").textContent = tasks.filter(t => t.download_type === "mediastream" || t.file_name.match(/\.(mp4|mkv|webm)$/i)).length;
+      document.getElementById("countAudio").textContent = tasks.filter(t => t.file_name.match(/\.(mp3|m4a)$/i)).length;
+      document.getElementById("countCompressed").textContent = tasks.filter(t => t.file_name.match(/\.(zip|rar|7z|iso)$/i)).length;
+      document.getElementById("countDoc").textContent = tasks.filter(t => t.file_name.match(/\.(pdf|docx|txt)$/i)).length;
+
+      document.getElementById("queueSummary").textContent = `${filtered.length} items`;
+
+      // Calculate total speed
+      const totalBps = tasks.reduce((sum, t) => sum + (t.status === "downloading" ? t.speed_bps : 0), 0);
+      document.getElementById("totalSpeed").textContent = `${(totalBps / (1024 * 1024)).toFixed(2)} MB/s`;
+
+      if (filtered.length === 0) {
+        taskList.innerHTML = "";
+        taskList.appendChild(emptyState);
+        emptyState.classList.remove("hidden");
+        return;
+      }
+
+      emptyState.classList.add("hidden");
+      taskList.innerHTML = filtered.map(t => {
+        const speedMb = (t.speed_bps / (1024 * 1024)).toFixed(2);
+        const currMb = (t.downloaded_bytes / (1024 * 1024)).toFixed(1);
+        const totMb = t.total_bytes ? (t.total_bytes / (1024 * 1024)).toFixed(1) : "--";
+        const eta = t.eta_seconds ? `${t.eta_seconds}s` : "--";
+
+        let statusBadge = "";
+        if (t.status === "downloading") statusBadge = `<span class="bg-sky-500/20 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded text-[10px] font-semibold">Downloading</span>`;
+        else if (t.status === "completed") statusBadge = `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[10px] font-semibold">Completed</span>`;
+        else if (t.status === "paused") statusBadge = `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[10px] font-semibold">Paused</span>`;
+        else if (t.status === "failed") statusBadge = `<span class="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded text-[10px] font-semibold">Failed</span>`;
+        else statusBadge = `<span class="bg-slate-800 text-slate-400 px-2 py-0.5 rounded text-[10px] font-semibold">${t.status}</span>`;
+
+        // Render segment chunks visualization if available
+        let chunksHtml = "";
+        if (t.chunks && t.chunks.length > 0) {
+          chunksHtml = `
+            <div class="flex gap-1 h-1.5 mt-2 rounded overflow-hidden bg-slate-900">
+              ${t.chunks.map(c => {
+                const totalChunk = c.end_byte - c.start_byte + 1;
+                const p = totalChunk > 0 ? (c.downloaded_bytes / totalChunk) * 100 : 0;
+                return `<div class="bg-sky-500/40 relative flex-1 h-full"><div class="bg-sky-400 h-full" style="width: ${p}%"></div></div>`;
+              }).join("")}
+            </div>
+          `;
+        }
+
+        return `
+          <div class="bg-slate-900/80 border border-slate-800/80 hover:border-slate-700/80 rounded-xl p-4 transition-all">
+            <div class="flex items-center justify-between gap-4 mb-2">
+              <div class="flex items-center gap-3 overflow-hidden">
+                <div class="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-lg flex-shrink-0">
+                  ${t.download_type === 'mediastream' ? '🎬' : '📦'}
+                </div>
+                <div class="truncate">
+                  <h4 class="text-xs font-bold text-slate-200 truncate" title="${t.file_name}">${t.file_name}</h4>
+                  <div class="text-[11px] text-slate-400 flex items-center gap-2">
+                    <span>${currMb} MB / ${totMb} MB</span>
+                    <span>•</span>
+                    <span class="font-mono text-sky-400 font-semibold">${speedMb} MB/s</span>
+                    <span>•</span>
+                    <span>ETA: ${eta}</span>
+                    <span>•</span>
+                    <span class="text-slate-500">${t.connections} threads</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                ${statusBadge}
+                ${t.status === 'downloading' ? `
+                  <button onclick="pauseTask('${t.id}')" class="bg-slate-800 hover:bg-slate-700 p-1.5 rounded-lg text-xs" title="Pause">⏸</button>
+                ` : ''}
+                ${t.status === 'paused' ? `
+                  <button onclick="resumeTask('${t.id}')" class="bg-blue-600 hover:bg-blue-500 p-1.5 rounded-lg text-xs text-white" title="Resume">▶</button>
+                ` : ''}
+                <button onclick="cancelTask('${t.id}')" class="bg-slate-800 hover:bg-rose-950/50 hover:text-rose-400 p-1.5 rounded-lg text-xs" title="Delete">🗑</button>
+              </div>
+            </div>
+
+            <!-- Main progress bar -->
+            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+              <div class="bg-gradient-to-r from-blue-500 to-sky-400 h-full rounded-full transition-all duration-300" style="width: ${t.progress_percent || 0}%"></div>
+            </div>
+
+            ${chunksHtml}
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function pauseTask(id) {
+      await fetch(`${API}/api/downloads/${id}/pause`, { method: "POST" });
+      fetchTasks();
+    }
+
+    async function resumeTask(id) {
+      await fetch(`${API}/api/downloads/${id}/resume`, { method: "POST" });
+      fetchTasks();
+    }
+
+    async function cancelTask(id) {
+      if (confirm("Cancel and delete this task?")) {
+        await fetch(`${API}/api/downloads/${id}`, { method: "DELETE" });
+        fetchTasks();
+      }
+    }
+
+    // Category filter click
+    document.querySelectorAll(".cat-btn").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll(".cat-btn").forEach(b => b.classList.remove("bg-blue-600/20", "text-blue-400", "border-blue-500/30"));
+        btn.classList.add("bg-blue-600/20", "text-blue-400", "border-blue-500/30");
+        currentFilter = btn.getAttribute("data-filter");
+        renderTasks();
+      };
+    });
+
+    // WebSocket real-time subscription
+    function setupWebSocket() {
+      const ws = new WebSocket("ws://127.0.0.1:45678/ws");
+      ws.onmessage = (event) => {
+        try {
+          const ev = JSON.parse(event.data);
+          if (ev.event === "TaskProgress") {
+            const task = tasks.find(t => t.id === ev.data.id);
+            if (task) {
+              task.downloaded_bytes = ev.data.downloaded_bytes;
+              task.total_bytes = ev.data.total_bytes;
+              task.speed_bps = ev.data.speed_bps;
+              task.progress_percent = ev.data.progress_percent;
+              task.eta_seconds = ev.data.eta_seconds;
+              task.chunks = ev.data.chunks;
+              renderTasks();
+            }
+          } else {
+            fetchTasks();
+          }
+        } catch (e) {}
+      };
+      ws.onclose = () => {
+        setTimeout(setupWebSocket, 2000);
+      };
+    }
+
+    // Initial load
+    fetchTasks();
+    setupWebSocket();
+    setInterval(fetchTasks, 3000);
+  </script>
+</body>
+</html>
