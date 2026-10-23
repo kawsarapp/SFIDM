@@ -166,7 +166,7 @@ impl TaskManager {
                 // Media Engine with yt-dlp + FFmpeg
                 let p_tasks = tasks.clone();
                 let p_event_tx = event_tx.clone();
-                let on_progress = move |downloaded: u64, speed: u64, chunks: Vec<ChunkInfo>| {
+                let on_progress = move |downloaded: u64, total: Option<u64>, speed: u64, percent: f32, eta: Option<u64>, chunks: Vec<ChunkInfo>| {
                     let p_tasks = p_tasks.clone();
                     let p_event_tx = p_event_tx.clone();
                     tokio::spawn(async move {
@@ -174,12 +174,12 @@ impl TaskManager {
                         if let Some(t) = map.get_mut(&id) {
                             t.status = DownloadStatus::Downloading;
                             t.downloaded_bytes = downloaded;
-                            t.speed_bps = speed;
-                            if let Some(tot) = t.total_bytes {
-                                if tot > 0 {
-                                    t.progress_percent = (downloaded as f32 / tot as f32) * 100.0;
-                                }
+                            if total.is_some() {
+                                t.total_bytes = total;
                             }
+                            t.speed_bps = speed;
+                            t.progress_percent = percent;
+                            t.eta_seconds = eta;
                             let _ = p_event_tx.send(DownloadEvent::TaskProgress {
                                 id,
                                 downloaded_bytes: downloaded,

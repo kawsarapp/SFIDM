@@ -4,15 +4,21 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN="$DIR/sidm-core/target/release/sidm-core"
 
+# Check if rebuild is needed (missing binary or source code updated)
+REBUILD=0
 if [ ! -f "$BIN" ]; then
-    BIN="$DIR/sidm-core/target/debug/sidm-core"
+    REBUILD=1
+elif [ "$1" == "--build" ] || [ "$1" == "-b" ]; then
+    REBUILD=1
+elif [ -n "$(find "$DIR/sidm-core/src" "$DIR/sidm-core/static" -newer "$BIN" 2>/dev/null | head -n 1)" ]; then
+    REBUILD=1
 fi
 
-if [ ! -f "$BIN" ]; then
-    echo "⚡ Building SIDM Core Engine (Optimized Release)..."
+if [ "$REBUILD" -eq 1 ]; then
+    echo "⚡ Building / Updating SIDM Core Engine (Optimized Release)..."
     cd "$DIR/sidm-core"
     cargo build --release
-    BIN="$DIR/sidm-core/target/release/sidm-core"
+    cd "$DIR"
 fi
 
 echo "=================================================="

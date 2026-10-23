@@ -210,18 +210,25 @@
   position: fixed !important;
   bottom: 28px !important;
   right: 28px !important;
-  width: 360px !important;
+  width: 380px !important;
+  max-width: calc(100vw - 40px) !important;
   z-index: 2147483647 !important;
   background: rgba(15, 23, 42, 0.98) !important;
   backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(56, 189, 248, 0.5) !important;
   border-radius: 14px !important;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.2) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 25px rgba(56, 189, 248, 0.25) !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
   user-select: none !important;
   display: none;
   animation: sidmCardIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
   overflow: hidden !important;
+}
+
+#sidm-download-card.sidm-card-show {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 @keyframes sidmCardIn {
@@ -252,6 +259,28 @@
   font-weight: 700 !important;
   color: #38bdf8 !important;
   letter-spacing: 0.3px !important;
+}
+
+.sidm-card-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.sidm-card-link {
+  color: #94a3b8 !important;
+  font-size: 11px !important;
+  text-decoration: none !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  padding: 2px 7px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.sidm-card-link:hover {
+  color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.15) !important;
 }
 
 .sidm-card-pulse {

@@ -271,13 +271,30 @@
           const textSpan = document.getElementById("licenseText");
           const iconSpan = document.getElementById("licenseIcon");
 
-          if (lic.status.status === "activated") {
-            textSpan.textContent = "👑 PRO Activated";
+          const statusRaw = typeof lic.status === "string" 
+            ? lic.status 
+            : (lic.status && lic.status.status ? lic.status.status : Object.keys(lic.status || {})[0] || "");
+          const statusLower = String(statusRaw).toLowerCase();
+
+          if (statusLower === "activated" || (lic.is_pro && statusLower !== "trial")) {
+            const plan = (lic.status && lic.status.data && lic.status.data.plan) ? lic.status.data.plan : "Commercial Pro";
+            textSpan.textContent = `👑 PRO Activated (${plan})`;
             iconSpan.textContent = "👑";
-            licenseBadgeBtn.className = "flex items-center gap-1.5 bg-gradient-to-r from-emerald-500/10 to-emerald-400/20 border border-emerald-500/30 text-emerald-300 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer";
-          } else if (lic.status.status === "trial") {
-            textSpan.textContent = `⭐ PRO Trial (${lic.status.data.days_remaining}d left)`;
+            licenseBadgeBtn.className = "flex items-center gap-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/30 border border-emerald-400/50 text-emerald-300 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer shadow-lg shadow-emerald-950/50";
+            
+            // Show status inside modal if opened
+            if (licenseResultMsg) {
+              licenseResultMsg.className = "text-xs p-2.5 rounded-lg bg-emerald-950/80 text-emerald-300 border border-emerald-800";
+              licenseResultMsg.textContent = `✅ Active: ${plan}`;
+              licenseResultMsg.classList.remove("hidden");
+            }
+          } else if (statusLower === "trial") {
+            const days = (lic.status && lic.status.data && lic.status.data.days_remaining != null) 
+              ? lic.status.data.days_remaining 
+              : ((lic.status && lic.status.days_remaining) || 14);
+            textSpan.textContent = `⭐ PRO Trial (${days}d left)`;
             iconSpan.textContent = "⭐";
+            licenseBadgeBtn.className = "flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-amber-400/20 border border-amber-500/30 text-amber-300 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer";
           } else {
             textSpan.textContent = "⚠️ Trial Expired (Activate)";
             iconSpan.textContent = "⚠️";

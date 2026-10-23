@@ -8,7 +8,7 @@ const LICENSE_SALT: &[u8] = b"SIDM_SUPER_SECURE_SALT_2026";
 const TRIAL_DAYS: i64 = 14;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status", content = "data")]
+#[serde(tag = "status", content = "data", rename_all = "lowercase")]
 pub enum LicenseStatus {
     Trial {
         days_remaining: i64,
@@ -74,6 +74,7 @@ impl LicenseManager {
         Self { hwid, sidm_dir }
     }
 
+    #[allow(dead_code)]
     pub fn get_hwid(&self) -> &str {
         &self.hwid
     }

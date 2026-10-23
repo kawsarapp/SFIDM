@@ -109,21 +109,30 @@
   }
 
   function getFacebookVideoUrl(vid, container) {
-    // 1. If currently on a Reel page (/reel/123456)
-    if (location.pathname.includes("/reel") || location.pathname.includes("/watch")) {
+    // 1. If currently on a Reel page (/reel/123456) or Watch page
+    if (location.pathname.includes("/reel/") || location.pathname.includes("/watch")) {
       return window.location.href;
     }
 
     // 2. Look for post permalink in closest article / container
     const article = vid.closest('[role="article"]') || container.closest('[role="article"]') || container;
-    const link = article.querySelector("a[href*='/reel/'], a[href*='/watch'], a[href*='/videos/']");
+    const link = article.querySelector("a[href*='/reel/'], a[href*='/watch'], a[href*='/videos/'], a[href*='fb.watch'], a[href*='/posts/']");
     if (link && link.href) {
       return link.href;
     }
 
-    // 3. Fallback to direct video src if available
+    // 3. Look for timestamp permalink
+    const timeLink = article.querySelector("a[href*='/permalink'], a[href*='story_fbid'], a[href*='facebook.com/watch']");
+    if (timeLink && timeLink.href) {
+      return timeLink.href;
+    }
+
+    // 4. Fallback to direct video src if available
     if (vid.src && !vid.src.startsWith("blob:")) {
       return vid.src;
+    }
+    if (vid.currentSrc && !vid.currentSrc.startsWith("blob:")) {
+      return vid.currentSrc;
     }
 
     return window.location.href;
@@ -300,45 +309,60 @@
   // ==========================================
   // IDM-Style Live Download Progress Card
   // ==========================================
+  let currentActiveTaskId = null;
+
   function showLiveDownloadCard(taskId, url) {
+    currentActiveTaskId = taskId;
     let card = document.getElementById("sidm-download-card");
+    const targetParent = document.fullscreenElement || document.body || document.documentElement;
+
     if (!card) {
       card = document.createElement("div");
       card.id = "sidm-download-card";
-      document.body.appendChild(card);
+      targetParent.appendChild(card);
+    } else if (card.parentElement !== targetParent) {
+      targetParent.appendChild(card);
     }
 
-    card.style.display = "block";
+    card.classList.add("sidm-card-show");
+    card.style.setProperty("display", "block", "important");
+    card.style.setProperty("visibility", "visible", "important");
+
     card.innerHTML = `
       <div class="sidm-card-header">
         <div class="sidm-card-title">
           <span class="sidm-card-pulse"></span>
-          <span>⚡ SIDM High-Speed Downloader</span>
+          <span>⚡ SIDM Turbo Downloader</span>
         </div>
-        <div class="sidm-card-close" title="Dismiss">&times;</div>
+        <div class="sidm-card-actions">
+          <a class="sidm-card-link" href="http://127.0.0.1:45678" target="_blank" title="Open SIDM Dashboard">🌐 Dashboard</a>
+          <span class="sidm-card-close" title="Dismiss">&times;</span>
+        </div>
       </div>
       <div class="sidm-card-body">
-        <div class="sidm-card-filename" id="sidmCardFilename">Connecting to stream...</div>
+        <div class="sidm-card-filename" id="sidmCardFilename">Connecting & analyzing stream...</div>
         <div class="sidm-card-bar-bg">
           <div class="sidm-card-bar-fill" id="sidmCardBar" style="width: 5%"></div>
         </div>
         <div class="sidm-card-stats">
-          <span id="sidmCardSpeed">⏳ Initializing 32 Threads...</span>
+          <span id="sidmCardSpeed">⏳ Initializing 32 Turbo Threads...</span>
           <span id="sidmCardPercent" style="font-weight: 700; color: #38bdf8;">0%</span>
         </div>
       </div>
     `;
 
     card.querySelector(".sidm-card-close").onclick = () => {
-      card.style.display = "none";
+      card.classList.remove("sidm-card-show");
+      card.style.setProperty("display", "none", "important");
       if (activeTaskPoll) clearInterval(activeTaskPoll);
+      activeTaskPoll = null;
     };
 
-    // Start live poller to update progress bar every 600ms
+    // Start live poller to update progress bar every 500ms
     if (activeTaskPoll) clearInterval(activeTaskPoll);
     activeTaskPoll = setInterval(() => {
-      fetchTaskStatus(taskId);
-    }, 600);
+      fetchTaskStatus(currentActiveTaskId);
+    }, 500);
   }
 
   function fetchTaskStatus(taskId) {
@@ -369,7 +393,7 @@
     const speedMb = (task.speed_bps / (1024 * 1024)).toFixed(2);
     const currMb = (task.downloaded_bytes / (1024 * 1024)).toFixed(1);
     const totMb = task.total_bytes ? (task.total_bytes / (1024 * 1024)).toFixed(1) : "--";
-    const eta = task.eta_seconds ? `${task.eta_seconds}s remaining` : "";
+    const eta = task.eta_seconds ? `${task.eta_seconds}s left` : "";
 
     if (speedEl) {
       if (task.status === "completed") {
@@ -379,16 +403,20 @@
           barEl.style.background = "linear-gradient(90deg, #10b981, #34d399)";
         }
         if (activeTaskPoll) clearInterval(activeTaskPoll);
+        activeTaskPoll = null;
       } else if (task.status === "failed") {
         speedEl.innerHTML = `<span style="color: #f87171;">❌ Download error: ${task.error_message || "Failed"}</span>`;
         if (activeTaskPoll) clearInterval(activeTaskPoll);
+        activeTaskPoll = null;
       } else {
-        speedEl.textContent = `🚀 ${speedMb} MB/s (${currMb} / ${totMb} MB) ${eta}`;
+        speedEl.textContent = `🚀 ${speedMb} MB/s (${currMb} / ${totMb} MB) ${eta} [32 Thds]`;
       }
     }
   }
 
   function startDownload(url, formatId, onSuccess, onError) {
+    // 1. Immediately show live card for instant feedback!
+    showLiveDownloadCard(null, url);
     showToast("info", "🚀 Connecting to SIDM Engine (32 Turbo Threads)...");
 
     chrome.runtime.sendMessage(
@@ -405,11 +433,17 @@
         if (res && res.success && res.data && res.data.success) {
           showToast("success", "✅ Download started in SIDM!");
           const taskId = res.data.task ? res.data.task.id : null;
-          showLiveDownloadCard(taskId, url);
+          if (taskId) {
+            currentActiveTaskId = taskId;
+          }
           if (onSuccess) onSuccess();
         } else {
           const errMsg = (res && res.error) ? res.error : "Make sure SIDM Engine is running! Run ./start_sidm.sh";
           showToast("error", `❌ ${errMsg}`);
+          const speedEl = document.getElementById("sidmCardSpeed");
+          if (speedEl) {
+            speedEl.innerHTML = `<span style="color: #f87171;">❌ ${errMsg}</span>`;
+          }
           if (onError) onError();
         }
       }

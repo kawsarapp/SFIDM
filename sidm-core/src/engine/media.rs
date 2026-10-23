@@ -218,7 +218,7 @@ impl MediaEngine {
         on_progress: F,
     ) -> Result<()>
     where
-        F: Fn(u64, u64, Vec<ChunkInfo>) + Send + Sync + 'static,
+        F: Fn(u64, Option<u64>, u64, f32, Option<u64>, Vec<ChunkInfo>) + Send + Sync + 'static,
     {
         let bin = get_ytdlp_bin();
         let mut cmd = Command::new(&bin);
@@ -250,6 +250,8 @@ impl MediaEngine {
             .arg("--no-playlist")
             .arg("--newline")
             .arg("--progress")
+            .arg("--user-agent")
+            .arg("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
             .arg("-o")
             .arg(&output_template)
             .arg(url);
@@ -279,34 +281,65 @@ impl MediaEngine {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 let mut percent = 0.0f32;
                 let mut speed = 0u64;
+                let mut total_bytes: Option<u64> = None;
+                let mut eta_seconds: Option<u64> = None;
 
                 for (i, p) in parts.iter().enumerate() {
+                    // 1. Percentage
                     if p.ends_with('%') {
                         let num = p.trim_end_matches('%');
-                        percent = num.parse::<f32>().unwrap_or(0.0);
+                        if let Ok(val) = num.parse::<f32>() {
+                            percent = val;
+                        }
                     }
+
+                    // 2. Total Size: following "of"
+                    if *p == "of" && i + 1 < parts.len() {
+                        let size_token = parts[i + 1].trim_start_matches('~');
+                        if let Some(bytes) = parse_size_to_bytes(size_token) {
+                            total_bytes = Some(bytes);
+                        }
+                    }
+
+                    // 3. Speed: token ending with /s or following "at"
                     if p.contains("/s") && i > 0 {
                         let speed_str = parts[i - 1];
-                        let val = speed_str.parse::<f64>().unwrap_or(0.0);
-                        if p.starts_with("MiB") {
-                            speed = (val * 1024.0 * 1024.0) as u64;
-                        } else if p.starts_with("KiB") {
-                            speed = (val * 1024.0) as u64;
-                        } else {
-                            speed = val as u64;
+                        if let Ok(val) = speed_str.parse::<f64>() {
+                            if p.starts_with("GiB") {
+                                speed = (val * 1024.0 * 1024.0 * 1024.0) as u64;
+                            } else if p.starts_with("MiB") {
+                                speed = (val * 1024.0 * 1024.0) as u64;
+                            } else if p.starts_with("KiB") {
+                                speed = (val * 1024.0) as u64;
+                            } else {
+                                speed = val as u64;
+                            }
                         }
+                    }
+
+                    // 4. ETA: token following "ETA"
+                    if *p == "ETA" && i + 1 < parts.len() {
+                        eta_seconds = parse_eta_to_seconds(parts[i + 1]);
                     }
                 }
 
-                let simulated_bytes = (percent * 100_000.0) as u64;
+                let downloaded_bytes = if let Some(tot) = total_bytes {
+                    (tot as f64 * (percent as f64 / 100.0)) as u64
+                } else {
+                    (percent * 1024.0 * 1024.0) as u64
+                };
+
                 on_progress(
-                    simulated_bytes,
+                    downloaded_bytes,
+                    total_bytes,
                     speed,
+                    percent,
+                    eta_seconds,
                     vec![ChunkInfo {
                         index: 0,
                         start_byte: 0,
-                        end_byte: 100_000_000,
-                        downloaded_bytes: simulated_bytes,
+                        end_byte: total_bytes.unwrap_or(100_000_000),
+                        downloaded_bytes,
                         active: true,
                     }],
                 );
@@ -319,5 +352,42 @@ impl MediaEngine {
         }
 
         Ok(())
+    }
+}
+
+fn parse_size_to_bytes(s: &str) -> Option<u64> {
+    let s = s.trim();
+    if s.is_empty() { return None; }
+
+    let (num_part, unit) = if s.ends_with("GiB") {
+        (&s[..s.len() - 3], 1024.0 * 1024.0 * 1024.0)
+    } else if s.ends_with("MiB") {
+        (&s[..s.len() - 3], 1024.0 * 1024.0)
+    } else if s.ends_with("KiB") {
+        (&s[..s.len() - 3], 1024.0)
+    } else if s.ends_with('B') {
+        (&s[..s.len() - 1], 1.0)
+    } else {
+        (s, 1024.0 * 1024.0)
+    };
+
+    num_part.parse::<f64>().ok().map(|n| (n * unit) as u64)
+}
+
+fn parse_eta_to_seconds(s: &str) -> Option<u64> {
+    let parts: Vec<&str> = s.split(':').collect();
+    match parts.len() {
+        2 => {
+            let m = parts[0].parse::<u64>().ok()?;
+            let sec = parts[1].parse::<u64>().ok()?;
+            Some(m * 60 + sec)
+        }
+        3 => {
+            let h = parts[0].parse::<u64>().ok()?;
+            let m = parts[1].parse::<u64>().ok()?;
+            let sec = parts[2].parse::<u64>().ok()?;
+            Some(h * 3600 + m * 60 + sec)
+        }
+        _ => None,
     }
 }
