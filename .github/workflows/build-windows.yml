@@ -1,0 +1,51 @@
+name: Build Windows Installer (SIDM_Setup.exe)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            sidm-core/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('sidm-core/Cargo.lock') }}
+
+      - name: Build SIDM Core Release Binary (Windows x64)
+        run: |
+          cd sidm-core
+          cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Prepare Binary for Installer
+        run: |
+          mkdir -p sidm-core/target/release
+          cp sidm-core/target/x86_64-pc-windows-msvc/release/sidm-core.exe sidm-core/target/release/sidm-core.exe
+
+      - name: Compile Inno Setup Windows Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: installer/sidm_setup.iss
+
+      - name: Upload Windows Setup .exe Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SIDM_v1.0.0_Setup_Windows_x64
+          path: dist/SIDM_v1.0.0_Setup.exe

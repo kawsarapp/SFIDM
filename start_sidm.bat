@@ -34,6 +34,11 @@ echo 🌐 Web Dashboard: http://127.0.0.1:45678
 echo 🔌 Browser Extension: Load unpacked '%DIR%sidm-extension'
 echo --------------------------------------------------
 
+:: Auto-integrate extension with Chrome, Edge, and Brave
+if exist "%DIR%installer\install_browsers.bat" (
+    call "%DIR%installer\install_browsers.bat" >nul 2>&1
+)
+
 :: Auto-open dashboard in default browser
 start "" "http://127.0.0.1:45678"
 
