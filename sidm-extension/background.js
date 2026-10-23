@@ -66,6 +66,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep message channel open for async response
   }
 
+  if (request.action === "GET_TASK_STATUS") {
+    if (!request.taskId) {
+      fetch(`${SIDM_API}/api/downloads`)
+        .then((res) => res.json())
+        .then((tasks) => {
+          const task = tasks && tasks.length > 0 ? tasks[0] : null;
+          sendResponse({ success: true, task });
+        })
+        .catch(() => sendResponse({ success: false }));
+      return true;
+    }
+
+    fetch(`${SIDM_API}/api/downloads/${request.taskId}`)
+      .then((res) => res.json())
+      .then((data) => sendResponse({ success: true, task: data.task }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (request.action === "INSPECT_MEDIA") {
     fetch(`${SIDM_API}/api/inspect`, {
       method: "POST",

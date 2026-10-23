@@ -1,13 +1,15 @@
 // SIDM Universal Video Sniffer & Floating Button Injector
 // Bulletproof support for YouTube, Facebook (Feed, Watch, Reels, Shorts), TikTok, and HTML5 video
+// Includes IDM-Style Live On-Screen Download Progress Card
 
 (function () {
   let activeDropdown = null;
+  let activeTaskPoll = null;
 
   function init() {
     scanAndAttach();
 
-    // DOM Observer for SPA navigation & infinite scroll (Facebook Feed, Reels, YouTube Shorts)
+    // DOM Observer for SPA navigation & infinite scroll
     const observer = new MutationObserver(() => {
       scanAndAttach();
     });
@@ -198,7 +200,7 @@
     badge.className = "sidm-floating-badge";
     badge.innerHTML = `
       <div class="sidm-badge-trigger">
-        <div class="sidm-btn-main" title="Click to 1-Click Download (1080p Full HD)">
+        <div class="sidm-btn-main" title="1-Click Download (1080p Full HD)">
           <span class="sidm-icon">⚡</span>
           <span class="sidm-label">Download Video</span>
         </div>
@@ -257,7 +259,7 @@
       const targetUrl = getTargetUrl();
       startDownload(targetUrl, "best_1080p", () => {
         label.textContent = "✅ Started!";
-        setTimeout(() => { label.textContent = origText; }, 2500);
+        setTimeout(() => { label.textContent = origText; }, 3000);
       }, () => {
         label.textContent = origText;
       });
@@ -295,6 +297,97 @@
     container.appendChild(badge);
   }
 
+  // ==========================================
+  // IDM-Style Live Download Progress Card
+  // ==========================================
+  function showLiveDownloadCard(taskId, url) {
+    let card = document.getElementById("sidm-download-card");
+    if (!card) {
+      card = document.createElement("div");
+      card.id = "sidm-download-card";
+      document.body.appendChild(card);
+    }
+
+    card.style.display = "block";
+    card.innerHTML = `
+      <div class="sidm-card-header">
+        <div class="sidm-card-title">
+          <span class="sidm-card-pulse"></span>
+          <span>⚡ SIDM High-Speed Downloader</span>
+        </div>
+        <div class="sidm-card-close" title="Dismiss">&times;</div>
+      </div>
+      <div class="sidm-card-body">
+        <div class="sidm-card-filename" id="sidmCardFilename">Connecting to stream...</div>
+        <div class="sidm-card-bar-bg">
+          <div class="sidm-card-bar-fill" id="sidmCardBar" style="width: 5%"></div>
+        </div>
+        <div class="sidm-card-stats">
+          <span id="sidmCardSpeed">⏳ Initializing 32 Threads...</span>
+          <span id="sidmCardPercent" style="font-weight: 700; color: #38bdf8;">0%</span>
+        </div>
+      </div>
+    `;
+
+    card.querySelector(".sidm-card-close").onclick = () => {
+      card.style.display = "none";
+      if (activeTaskPoll) clearInterval(activeTaskPoll);
+    };
+
+    // Start live poller to update progress bar every 600ms
+    if (activeTaskPoll) clearInterval(activeTaskPoll);
+    activeTaskPoll = setInterval(() => {
+      fetchTaskStatus(taskId);
+    }, 600);
+  }
+
+  function fetchTaskStatus(taskId) {
+    chrome.runtime.sendMessage(
+      { action: "GET_TASK_STATUS", taskId: taskId },
+      (res) => {
+        if (!res || !res.success || !res.task) return;
+        updateLiveCard(res.task);
+      }
+    );
+  }
+
+  function updateLiveCard(task) {
+    const card = document.getElementById("sidm-download-card");
+    if (!card || card.style.display === "none") return;
+
+    const filenameEl = document.getElementById("sidmCardFilename");
+    const barEl = document.getElementById("sidmCardBar");
+    const speedEl = document.getElementById("sidmCardSpeed");
+    const percentEl = document.getElementById("sidmCardPercent");
+
+    if (filenameEl && task.file_name) filenameEl.textContent = task.file_name;
+
+    const percent = task.progress_percent || 0;
+    if (barEl) barEl.style.width = `${Math.max(5, percent)}%`;
+    if (percentEl) percentEl.textContent = `${percent.toFixed(1)}%`;
+
+    const speedMb = (task.speed_bps / (1024 * 1024)).toFixed(2);
+    const currMb = (task.downloaded_bytes / (1024 * 1024)).toFixed(1);
+    const totMb = task.total_bytes ? (task.total_bytes / (1024 * 1024)).toFixed(1) : "--";
+    const eta = task.eta_seconds ? `${task.eta_seconds}s remaining` : "";
+
+    if (speedEl) {
+      if (task.status === "completed") {
+        speedEl.innerHTML = `<span style="color: #34d399; font-weight: 700;">✅ Download Complete! Saved to Downloads/SIDM</span>`;
+        if (barEl) {
+          barEl.style.width = "100%";
+          barEl.style.background = "linear-gradient(90deg, #10b981, #34d399)";
+        }
+        if (activeTaskPoll) clearInterval(activeTaskPoll);
+      } else if (task.status === "failed") {
+        speedEl.innerHTML = `<span style="color: #f87171;">❌ Download error: ${task.error_message || "Failed"}</span>`;
+        if (activeTaskPoll) clearInterval(activeTaskPoll);
+      } else {
+        speedEl.textContent = `🚀 ${speedMb} MB/s (${currMb} / ${totMb} MB) ${eta}`;
+      }
+    }
+  }
+
   function startDownload(url, formatId, onSuccess, onError) {
     showToast("info", "🚀 Connecting to SIDM Engine (32 Turbo Threads)...");
 
@@ -311,6 +404,8 @@
       (res) => {
         if (res && res.success && res.data && res.data.success) {
           showToast("success", "✅ Download started in SIDM!");
+          const taskId = res.data.task ? res.data.task.id : null;
+          showLiveDownloadCard(taskId, url);
           if (onSuccess) onSuccess();
         } else {
           const errMsg = (res && res.error) ? res.error : "Make sure SIDM Engine is running! Run ./start_sidm.sh";
