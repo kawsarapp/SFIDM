@@ -23,11 +23,12 @@ impl Default for AppConfig {
 }
 
 fn dirs_or_home() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        let p = PathBuf::from(home).join("Downloads").join("SIDM");
-        let _ = std::fs::create_dir_all(&p);
-        p
-    } else {
-        PathBuf::from("./downloads")
-    }
+    let base = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
+
+    let p = base.join("Downloads").join("SIDM");
+    let _ = std::fs::create_dir_all(&p);
+    p
 }

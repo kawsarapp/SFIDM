@@ -9,12 +9,17 @@ pub struct MediaEngine;
 
 fn get_ytdlp_bin() -> String {
     let candidates = [
+        "bin/yt-dlp.exe",
+        "bin/yt-dlp",
+        "sidm-core/bin/yt-dlp.exe",
+        "sidm-core/bin/yt-dlp",
+        "./bin/yt-dlp.exe",
+        "./bin/yt-dlp",
+        "./sidm-core/bin/yt-dlp.exe",
+        "./sidm-core/bin/yt-dlp",
         "/home/kawsar/Documents/Github/Repo/SIDM/bin/yt-dlp",
         "/home/kawsar/Documents/Github/Repo/SIDM/sidm-core/bin/yt-dlp",
-        "./bin/yt-dlp",
-        "./sidm-core/bin/yt-dlp",
-        "bin/yt-dlp",
-        "sidm-core/bin/yt-dlp",
+        "yt-dlp.exe",
         "yt-dlp",
     ];
     for c in &candidates {
@@ -24,7 +29,16 @@ fn get_ytdlp_bin() -> String {
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            for sub in &["bin/yt-dlp", "../bin/yt-dlp", "../../bin/yt-dlp"] {
+            for sub in &[
+                "bin/yt-dlp.exe",
+                "bin/yt-dlp",
+                "yt-dlp.exe",
+                "yt-dlp",
+                "../bin/yt-dlp.exe",
+                "../bin/yt-dlp",
+                "../../bin/yt-dlp.exe",
+                "../../bin/yt-dlp"
+            ] {
                 let p = parent.join(sub);
                 if p.exists() {
                     return p.to_string_lossy().to_string();
@@ -32,7 +46,11 @@ fn get_ytdlp_bin() -> String {
             }
         }
     }
-    "yt-dlp".to_string()
+    if cfg!(target_os = "windows") {
+        "yt-dlp.exe".to_string()
+    } else {
+        "yt-dlp".to_string()
+    }
 }
 
 impl MediaEngine {

@@ -90,12 +90,21 @@ impl LicenseManager {
             raw_data.push_str(id.trim());
         }
 
-        // 2. CPU info or hostname
+        // 2. CPU info, Hostname, and Windows Identifiers
         if let Ok(hostname) = std::env::var("HOSTNAME") {
             raw_data.push_str(&hostname);
         }
+        if let Ok(comp) = std::env::var("COMPUTERNAME") {
+            raw_data.push_str(&comp);
+        }
         if let Ok(user) = std::env::var("USER") {
             raw_data.push_str(&user);
+        }
+        if let Ok(user) = std::env::var("USERNAME") {
+            raw_data.push_str(&user);
+        }
+        if let Ok(cpu) = std::env::var("PROCESSOR_IDENTIFIER") {
+            raw_data.push_str(&cpu);
         }
 
         // Fallback if empty
@@ -123,11 +132,11 @@ impl LicenseManager {
     }
 
     fn get_sidm_dir() -> PathBuf {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".sidm")
-        } else {
-            PathBuf::from("./.sidm")
-        }
+        let base = std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."));
+        base.join(".sidm")
     }
 
     /// Check the current licensing status
