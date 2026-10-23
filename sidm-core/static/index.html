@@ -45,8 +45,13 @@
       </div>
     </div>
 
-    <!-- Overall Speed Display -->
-    <div class="flex items-center gap-6">
+    <!-- Overall Speed Display & License -->
+    <div class="flex items-center gap-4">
+      <button id="licenseBadgeBtn" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-amber-400/20 hover:from-amber-500/20 hover:to-amber-400/30 border border-amber-500/30 text-amber-300 px-3 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer">
+        <span id="licenseIcon">⭐</span>
+        <span id="licenseText">Checking License...</span>
+      </button>
+
       <div class="hidden md:flex items-center gap-2 bg-slate-900 border border-slate-800 px-4 py-1.5 rounded-full">
         <div class="w-2 h-2 rounded-full bg-emerald-400 pulse-live"></div>
         <span class="text-xs text-slate-400">Total Speed:</span>
@@ -185,10 +190,133 @@
     </div>
   </div>
 
+  <!-- License Modal -->
+  <div id="licenseModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+          <span>👑</span> SIDM Commercial License
+        </h3>
+        <button id="closeLicenseModalBtn" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+      </div>
+
+      <div class="flex flex-col gap-3">
+        <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-1">
+          <span class="text-[10px] text-slate-400 uppercase font-semibold">Your Device Hardware ID (HWID)</span>
+          <div class="flex items-center justify-between">
+            <span id="displayHwid" class="font-mono text-xs text-sky-400 font-bold select-all">Loading...</span>
+            <button id="copyHwidBtn" class="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-slate-300">Copy</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Serial / License Key</label>
+          <input type="text" id="licenseKeyInput" placeholder="SIDM-PRO-XXXX-XXXX-XXXX" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-amber-400 uppercase">
+        </div>
+
+        <div>
+          <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Registered Email (Optional)</label>
+          <input type="email" id="licenseEmailInput" placeholder="user@example.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400">
+        </div>
+
+        <div id="licenseResultMsg" class="hidden text-xs p-2.5 rounded-lg"></div>
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-slate-800 pt-3 mt-2">
+        <button id="cancelLicenseBtn" class="px-4 py-2 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800 transition">Close</button>
+        <button id="activateBtn" class="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold px-5 py-2 rounded-lg shadow-lg shadow-amber-500/20 transition">
+          ⚡ Activate License
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API = "http://127.0.0.1:45678";
     let tasks = [];
     let currentFilter = "all";
+
+    // License Manager Handling
+    const licenseModal = document.getElementById("licenseModal");
+    const licenseBadgeBtn = document.getElementById("licenseBadgeBtn");
+    const closeLicenseModalBtn = document.getElementById("closeLicenseModalBtn");
+    const cancelLicenseBtn = document.getElementById("cancelLicenseBtn");
+    const displayHwid = document.getElementById("displayHwid");
+    const copyHwidBtn = document.getElementById("copyHwidBtn");
+    const licenseKeyInput = document.getElementById("licenseKeyInput");
+    const licenseEmailInput = document.getElementById("licenseEmailInput");
+    const activateBtn = document.getElementById("activateBtn");
+    const licenseResultMsg = document.getElementById("licenseResultMsg");
+
+    licenseBadgeBtn.onclick = () => { licenseModal.classList.remove("hidden"); };
+    closeLicenseModalBtn.onclick = cancelLicenseBtn.onclick = () => { licenseModal.classList.add("hidden"); };
+
+    copyHwidBtn.onclick = () => {
+      navigator.clipboard.writeText(displayHwid.textContent);
+      copyHwidBtn.textContent = "Copied!";
+      setTimeout(() => copyHwidBtn.textContent = "Copy", 2000);
+    };
+
+    async function fetchLicense() {
+      try {
+        const res = await fetch(`${API}/api/license`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          const lic = json.data;
+          displayHwid.textContent = lic.hwid;
+
+          const textSpan = document.getElementById("licenseText");
+          const iconSpan = document.getElementById("licenseIcon");
+
+          if (lic.status.status === "activated") {
+            textSpan.textContent = "👑 PRO Activated";
+            iconSpan.textContent = "👑";
+            licenseBadgeBtn.className = "flex items-center gap-1.5 bg-gradient-to-r from-emerald-500/10 to-emerald-400/20 border border-emerald-500/30 text-emerald-300 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer";
+          } else if (lic.status.status === "trial") {
+            textSpan.textContent = `⭐ PRO Trial (${lic.status.data.days_remaining}d left)`;
+            iconSpan.textContent = "⭐";
+          } else {
+            textSpan.textContent = "⚠️ Trial Expired (Activate)";
+            iconSpan.textContent = "⚠️";
+            licenseBadgeBtn.className = "flex items-center gap-1.5 bg-gradient-to-r from-rose-500/10 to-rose-400/20 border border-rose-500/30 text-rose-300 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer";
+          }
+        }
+      } catch (e) {}
+    }
+
+    activateBtn.onclick = async () => {
+      const license_key = licenseKeyInput.value.trim();
+      const customer_email = licenseEmailInput.value.trim() || null;
+      if (!license_key) {
+        alert("Please enter your serial license key.");
+        return;
+      }
+
+      activateBtn.textContent = "Validating...";
+      try {
+        const res = await fetch(`${API}/api/license/activate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ license_key, customer_email })
+        });
+        const data = await res.json();
+        if (data.success) {
+          licenseResultMsg.className = "text-xs p-2.5 rounded-lg bg-emerald-950/80 text-emerald-300 border border-emerald-800";
+          licenseResultMsg.textContent = "🎉 License successfully activated! Commercial Pro unlocked.";
+          licenseResultMsg.classList.remove("hidden");
+          fetchLicense();
+          setTimeout(() => { licenseModal.classList.add("hidden"); }, 2000);
+        } else {
+          licenseResultMsg.className = "text-xs p-2.5 rounded-lg bg-rose-950/80 text-rose-300 border border-rose-800";
+          licenseResultMsg.textContent = "❌ " + (data.error || "Invalid license key.");
+          licenseResultMsg.classList.remove("hidden");
+        }
+      } catch (e) {
+        alert("Error contacting licensing service: " + e.message);
+      } finally {
+        activateBtn.textContent = "⚡ Activate License";
+      }
+    };
 
     // Modal elements
     const addModal = document.getElementById("addModal");
@@ -438,6 +566,7 @@
     }
 
     // Initial load
+    fetchLicense();
     fetchTasks();
     setupWebSocket();
     setInterval(fetchTasks, 3000);

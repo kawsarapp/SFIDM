@@ -30,6 +30,8 @@ pub fn create_router(manager: Arc<TaskManager>) -> Router {
         .route("/api/downloads", post(routes::create_download))
         .route("/api/downloads/:id", get(routes::get_download))
         .route("/api/inspect", post(routes::inspect_media))
+        .route("/api/license", get(routes::get_license))
+        .route("/api/license/activate", post(routes::activate_license))
         .route("/api/downloads/:id/pause", post(routes::pause_download))
         .route("/api/downloads/:id/resume", post(routes::resume_download))
         .route("/api/downloads/:id", delete(routes::cancel_download))

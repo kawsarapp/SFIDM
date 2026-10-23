@@ -92,3 +92,24 @@ pub async fn cancel_download(
         Err(e) => Json(json!({ "success": false, "error": e.to_string() })),
     }
 }
+
+pub async fn get_license(State(manager): State<Arc<TaskManager>>) -> impl IntoResponse {
+    let info = manager.license.check_license();
+    Json(json!({ "success": true, "data": info }))
+}
+
+pub async fn activate_license(
+    State(manager): State<Arc<TaskManager>>,
+    Json(payload): Json<crate::licensing::ActivateRequest>,
+) -> impl IntoResponse {
+    match manager.license.activate(&payload.license_key, payload.customer_email) {
+        Ok(info) => (
+            StatusCode::OK,
+            Json(json!({ "success": true, "data": info })),
+        ),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": e })),
+        ),
+    }
+}

@@ -17,4 +17,16 @@ echo "🌐 Web Dashboard: http://127.0.0.1:45678"
 echo "🔌 Browser Extension: Load unpacked '$DIR/sidm-extension'"
 echo "--------------------------------------------------"
 
+# Auto-open dashboard window in background
+(
+  sleep 1
+  if command -v google-chrome >/dev/null 2>&1; then
+    google-chrome --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
+  elif command -v chromium >/dev/null 2>&1; then
+    chromium --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open http://127.0.0.1:45678 >/dev/null 2>&1 &
+  fi
+) &
+
 exec "$BIN" server

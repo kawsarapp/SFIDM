@@ -1,5 +1,6 @@
 mod config;
 mod engine;
+mod licensing;
 mod model;
 mod server;
 
@@ -140,6 +141,9 @@ async fn main() -> anyhow::Result<()> {
             println!("       🚀 SIDM Download Manager Core Daemon       ");
             println!("==================================================");
             let manager = Arc::new(TaskManager::new(config.clone()));
+            let lic = manager.license.check_license();
+            println!("🔑 Hardware ID (HWID): {}", lic.hwid);
+            println!("🛡️  License Status: {:?}", lic.status);
             server::start_server(config, manager).await?;
         }
         None => {
@@ -148,6 +152,9 @@ async fn main() -> anyhow::Result<()> {
             println!("       🚀 SIDM Download Manager Core Daemon       ");
             println!("==================================================");
             let manager = Arc::new(TaskManager::new(config.clone()));
+            let lic = manager.license.check_license();
+            println!("🔑 Hardware ID (HWID): {}", lic.hwid);
+            println!("🛡️  License Status: {:?}", lic.status);
             server::start_server(config, manager).await?;
         }
     }

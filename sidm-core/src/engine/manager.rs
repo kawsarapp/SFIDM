@@ -2,6 +2,7 @@ use crate::config::AppConfig;
 use crate::engine::classifier::Classifier;
 use crate::engine::media::MediaEngine;
 use crate::engine::segmenter::Segmenter;
+use crate::licensing::LicenseManager;
 use crate::model::{
     ChunkInfo, CreateDownloadRequest, DownloadEvent, DownloadStatus, DownloadTask, DownloadType,
 };
@@ -19,6 +20,7 @@ pub struct TaskManager {
     pause_senders: Arc<RwLock<HashMap<Uuid, watch::Sender<bool>>>>,
     event_tx: broadcast::Sender<DownloadEvent>,
     segmenter: Arc<Segmenter>,
+    pub license: Arc<LicenseManager>,
 }
 
 impl TaskManager {
@@ -30,6 +32,7 @@ impl TaskManager {
             pause_senders: Arc::new(RwLock::new(HashMap::new())),
             event_tx,
             segmenter: Arc::new(Segmenter::new()),
+            license: Arc::new(LicenseManager::new()),
         }
     }
 
