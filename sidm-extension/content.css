@@ -249,6 +249,25 @@
   padding: 10px 14px !important;
   background: rgba(0, 0, 0, 0.35) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  cursor: grab !important;
+  user-select: none !important;
+}
+
+.sidm-card-header:active {
+  cursor: grabbing !important;
+}
+
+#sidm-download-card.sidm-minimized {
+  width: 290px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 15px rgba(56, 189, 248, 0.3) !important;
+}
+
+#sidm-download-card.sidm-minimized .sidm-card-body {
+  display: none !important;
+}
+
+#sidm-download-card.sidm-minimized .sidm-card-header {
+  border-bottom: none !important;
 }
 
 .sidm-card-title {
@@ -259,12 +278,16 @@
   font-weight: 700 !important;
   color: #38bdf8 !important;
   letter-spacing: 0.3px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }
 
 .sidm-card-actions {
   display: flex !important;
   align-items: center !important;
-  gap: 8px !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
 }
 
 .sidm-card-link {
@@ -283,6 +306,24 @@
   background: rgba(56, 189, 248, 0.15) !important;
 }
 
+.sidm-card-btn {
+  color: #94a3b8 !important;
+  font-size: 15px !important;
+  cursor: pointer !important;
+  line-height: 1 !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+}
+
+.sidm-card-btn:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
 .sidm-card-pulse {
   width: 8px !important;
   height: 8px !important;
@@ -290,27 +331,13 @@
   background: #34d399 !important;
   box-shadow: 0 0 8px #34d399 !important;
   display: inline-block !important;
+  flex-shrink: 0 !important;
   animation: sidmPulse 1.5s infinite !important;
 }
 
 @keyframes sidmPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.85); }
-}
-
-.sidm-card-close {
-  color: #94a3b8 !important;
-  font-size: 18px !important;
-  cursor: pointer !important;
-  line-height: 1 !important;
-  padding: 2px 6px !important;
-  border-radius: 4px !important;
-  transition: all 0.2s ease !important;
-}
-
-.sidm-card-close:hover {
-  color: #ffffff !important;
-  background: rgba(255, 255, 255, 0.1) !important;
 }
 
 .sidm-card-body {
@@ -328,6 +355,65 @@
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   line-height: 1.3 !important;
+}
+
+.sidm-card-location {
+  font-size: 11px !important;
+  color: #94a3b8 !important;
+  background: rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 6px 10px !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.sidm-card-location strong {
+  color: #38bdf8 !important;
+}
+
+.sidm-card-btn-row {
+  display: flex !important;
+  gap: 8px !important;
+  margin-top: 4px !important;
+}
+
+.sidm-action-btn {
+  flex: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 7px 10px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  text-decoration: none !important;
+}
+
+.sidm-btn-folder {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border: 1px solid rgba(16, 185, 129, 0.5) !important;
+  color: #34d399 !important;
+}
+
+.sidm-btn-folder:hover {
+  background: rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4) !important;
+}
+
+.sidm-btn-play {
+  background: rgba(37, 99, 235, 0.25) !important;
+  border: 1px solid rgba(59, 130, 246, 0.5) !important;
+  color: #93c5fd !important;
+}
+
+.sidm-btn-play:hover {
+  background: rgba(37, 99, 235, 0.4) !important;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4) !important;
 }
 
 .sidm-card-bar-bg {

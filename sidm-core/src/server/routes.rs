@@ -98,6 +98,44 @@ pub async fn get_license(State(manager): State<Arc<TaskManager>>) -> impl IntoRe
     Json(json!({ "success": true, "data": info }))
 }
 
+pub async fn open_download_folder(
+    State(manager): State<Arc<TaskManager>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    match manager.open_task_folder(id).await {
+        Ok(_) => (StatusCode::OK, Json(json!({ "success": true }))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": e.to_string() })),
+        ),
+    }
+}
+
+pub async fn open_download_file(
+    State(manager): State<Arc<TaskManager>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    match manager.open_task_file(id).await {
+        Ok(_) => (StatusCode::OK, Json(json!({ "success": true }))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": e.to_string() })),
+        ),
+    }
+}
+
+pub async fn open_default_folder(
+    State(manager): State<Arc<TaskManager>>,
+) -> impl IntoResponse {
+    match manager.open_default_folder() {
+        Ok(_) => (StatusCode::OK, Json(json!({ "success": true }))),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "success": false, "error": e.to_string() })),
+        ),
+    }
+}
+
 pub async fn activate_license(
     State(manager): State<Arc<TaskManager>>,
     Json(payload): Json<crate::licensing::ActivateRequest>,

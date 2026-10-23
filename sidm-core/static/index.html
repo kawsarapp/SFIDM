@@ -58,6 +58,9 @@
         <span id="totalSpeed" class="text-xs font-mono font-bold text-sky-400">0.00 MB/s</span>
       </div>
 
+      <button id="openDefaultFolderBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 flex items-center gap-1.5 transition-all" title="Open Downloads Folder">
+        <span>📂</span> Downloads
+      </button>
       <button id="openAddModalBtn" class="bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-500 hover:to-sky-500 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-md shadow-blue-600/30 flex items-center gap-2 transition-all">
         <span>+</span> Add URL
       </button>
@@ -510,6 +513,10 @@
 
               <div class="flex items-center gap-2">
                 ${statusBadge}
+                ${t.status === 'completed' ? `
+                  <button onclick="openTaskFolder('${t.id}')" class="bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 p-1.5 rounded-lg text-xs" title="Open Containing Folder">📂</button>
+                  <button onclick="openTaskFile('${t.id}')" class="bg-sky-950/60 hover:bg-sky-900 border border-sky-800 text-sky-300 p-1.5 rounded-lg text-xs" title="Play Video">▶</button>
+                ` : ''}
                 ${t.status === 'downloading' ? `
                   <button onclick="pauseTask('${t.id}')" class="bg-slate-800 hover:bg-slate-700 p-1.5 rounded-lg text-xs" title="Pause">⏸</button>
                 ` : ''}
@@ -529,6 +536,21 @@
           </div>
         `;
       }).join("");
+    }
+
+    async function openTaskFolder(id) {
+      await fetch(`${API}/api/downloads/${id}/open-folder`, { method: "POST" });
+    }
+
+    async function openTaskFile(id) {
+      await fetch(`${API}/api/downloads/${id}/open-file`, { method: "POST" });
+    }
+
+    const openDefaultFolderBtn = document.getElementById("openDefaultFolderBtn");
+    if (openDefaultFolderBtn) {
+      openDefaultFolderBtn.onclick = async () => {
+        await fetch(`${API}/api/open-folder`, { method: "POST" });
+      };
     }
 
     async function pauseTask(id) {

@@ -390,4 +390,81 @@ impl TaskManager {
         map.remove(&id);
         Ok(())
     }
+
+    pub async fn open_task_folder(&self, id: Uuid) -> Result<()> {
+        let task = self.get_task(id).await.ok_or_else(|| anyhow!("Task not found"))?;
+        let p = std::path::PathBuf::from(&task.save_path);
+        let folder = if p.is_dir() {
+            p
+        } else if let Some(parent) = p.parent() {
+            if parent.exists() {
+                parent.to_path_buf()
+            } else {
+                self.config.default_download_dir.clone()
+            }
+        } else {
+            self.config.default_download_dir.clone()
+        };
+
+        Self::launch_system_open(&folder)
+    }
+
+    pub async fn open_task_file(&self, id: Uuid) -> Result<()> {
+        let task = self.get_task(id).await.ok_or_else(|| anyhow!("Task not found"))?;
+        let p = std::path::PathBuf::from(&task.save_path);
+        
+        let target = if p.exists() {
+            p
+        } else if let Some(parent) = p.parent() {
+            // Check for downloaded video in target directory
+            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            if let Ok(entries) = std::fs::read_dir(parent) {
+                let mut candidates: Vec<_> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        let name = e.file_name().to_string_lossy().to_string();
+                        (!stem.is_empty() && name.contains(stem)) || (!name.ends_with(".part") && !name.ends_with(".ytdl"))
+                    })
+                    .collect();
+                candidates.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
+                if let Some(last) = candidates.last() {
+                    last.path()
+                } else {
+                    parent.to_path_buf()
+                }
+            } else {
+                parent.to_path_buf()
+            }
+        } else {
+            self.config.default_download_dir.clone()
+        };
+
+        Self::launch_system_open(&target)
+    }
+
+    pub fn open_default_folder(&self) -> Result<()> {
+        Self::launch_system_open(&self.config.default_download_dir)
+    }
+
+    fn launch_system_open(path: &std::path::Path) -> Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            std::process::Command::new("xdg-open")
+                .arg(path)
+                .spawn()?;
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::process::Command::new("explorer")
+                .arg(path)
+                .spawn()?;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            std::process::Command::new("open")
+                .arg(path)
+                .spawn()?;
+        }
+        Ok(())
+    }
 }

@@ -85,6 +85,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "OPEN_TASK_FOLDER") {
+    const url = request.taskId ? `${SIDM_API}/api/downloads/${request.taskId}/open-folder` : `${SIDM_API}/api/open-folder`;
+    fetch(url, { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => sendResponse(data))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.action === "OPEN_TASK_FILE") {
+    if (!request.taskId) return;
+    fetch(`${SIDM_API}/api/downloads/${request.taskId}/open-file`, { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => sendResponse(data))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (request.action === "INSPECT_MEDIA") {
     fetch(`${SIDM_API}/api/inspect`, {
       method: "POST",

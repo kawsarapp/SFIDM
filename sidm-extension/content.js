@@ -326,18 +326,20 @@
     }
 
     card.classList.add("sidm-card-show");
+    card.classList.remove("sidm-minimized");
     card.style.setProperty("display", "block", "important");
     card.style.setProperty("visibility", "visible", "important");
 
     card.innerHTML = `
-      <div class="sidm-card-header">
+      <div class="sidm-card-header" id="sidmCardHeader" title="Drag to move card anywhere">
         <div class="sidm-card-title">
           <span class="sidm-card-pulse"></span>
-          <span>⚡ SIDM Turbo Downloader</span>
+          <span id="sidmCardHeaderTitle">⚡ SIDM Turbo Downloader</span>
         </div>
         <div class="sidm-card-actions">
           <a class="sidm-card-link" href="${SIDM_BRIDGE_HTTP}" target="_blank" title="Open SIDM Dashboard">🌐 Dashboard</a>
-          <span class="sidm-card-close" title="Dismiss">&times;</span>
+          <span class="sidm-card-btn" id="sidmMinimizeBtn" title="Minimize to compact bar">−</span>
+          <span class="sidm-card-btn sidm-card-close" id="sidmCloseBtn" title="Dismiss">&times;</span>
         </div>
       </div>
       <div class="sidm-card-body">
@@ -345,14 +347,36 @@
         <div class="sidm-card-bar-bg">
           <div class="sidm-card-bar-fill" id="sidmCardBar" style="width: 5%"></div>
         </div>
-        <div class="sidm-card-stats">
+        <div class="sidm-card-stats" id="sidmCardStats">
           <span id="sidmCardSpeed">⏳ Initializing 32 Turbo Threads...</span>
           <span id="sidmCardPercent" style="font-weight: 700; color: #38bdf8;">0%</span>
         </div>
+        <div id="sidmCardCompleteArea" style="display: none;"></div>
       </div>
     `;
 
-    card.querySelector(".sidm-card-close").onclick = () => {
+    const header = card.querySelector("#sidmCardHeader");
+    const minimizeBtn = card.querySelector("#sidmMinimizeBtn");
+    const closeBtn = card.querySelector("#sidmCloseBtn");
+
+    // 1. Draggable card
+    enableCardDragging(card, header);
+
+    // 2. Minimize / Expand toggle
+    minimizeBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleCardMinimize(card, minimizeBtn);
+    };
+
+    header.onclick = (e) => {
+      if (card.classList.contains("sidm-minimized")) {
+        toggleCardMinimize(card, minimizeBtn);
+      }
+    };
+
+    // 3. Close button
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
       card.classList.remove("sidm-card-show");
       card.style.setProperty("display", "none", "important");
       if (activeTaskPoll) clearInterval(activeTaskPoll);
@@ -364,6 +388,70 @@
     activeTaskPoll = setInterval(() => {
       fetchTaskStatus(currentActiveTaskId);
     }, 500);
+  }
+
+  function toggleCardMinimize(card, btn) {
+    const isMin = card.classList.toggle("sidm-minimized");
+    if (btn) {
+      btn.textContent = isMin ? "□" : "−";
+      btn.title = isMin ? "Expand card" : "Minimize to compact bar";
+    }
+  }
+
+  function enableCardDragging(card, header) {
+    if (card._dragInit) return;
+    card._dragInit = true;
+
+    let isDragging = false;
+    let startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".sidm-card-actions") || e.target.closest("button") || e.target.closest("a")) {
+        return;
+      }
+
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = card.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      card.style.bottom = "auto";
+      card.style.right = "auto";
+      card.style.left = `${initialLeft}px`;
+      card.style.top = `${initialTop}px`;
+      header.style.cursor = "grabbing";
+
+      const onMouseMove = (moveEvent) => {
+        if (!isDragging) return;
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        const maxLeft = Math.max(10, window.innerWidth - card.offsetWidth - 10);
+        const maxTop = Math.max(10, window.innerHeight - card.offsetHeight - 10);
+
+        newLeft = Math.max(10, Math.min(maxLeft, newLeft));
+        newTop = Math.max(10, Math.min(maxTop, newTop));
+
+        card.style.left = `${newLeft}px`;
+        card.style.top = `${newTop}px`;
+      };
+
+      const onMouseUp = () => {
+        isDragging = false;
+        header.style.cursor = "grab";
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      };
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
   }
 
   function fetchTaskStatus(taskId) {
@@ -396,14 +484,27 @@
       .catch(() => {});
   }
 
+  function openTaskFolder(taskId) {
+    const url = taskId ? `${SIDM_BRIDGE_HTTP}/api/downloads/${taskId}/open-folder` : `${SIDM_BRIDGE_HTTP}/api/open-folder`;
+    fetch(url, { method: "POST" }).catch((e) => console.error("Error opening folder:", e));
+  }
+
+  function openTaskFile(taskId) {
+    if (!taskId) return;
+    fetch(`${SIDM_BRIDGE_HTTP}/api/downloads/${taskId}/open-file`, { method: "POST" })
+      .catch((e) => console.error("Error opening file:", e));
+  }
+
   function updateLiveCard(task) {
     const card = document.getElementById("sidm-download-card");
     if (!card || card.style.display === "none") return;
 
+    const titleEl = document.getElementById("sidmCardHeaderTitle");
     const filenameEl = document.getElementById("sidmCardFilename");
     const barEl = document.getElementById("sidmCardBar");
     const speedEl = document.getElementById("sidmCardSpeed");
     const percentEl = document.getElementById("sidmCardPercent");
+    const completeArea = document.getElementById("sidmCardCompleteArea");
 
     if (filenameEl && task.file_name) filenameEl.textContent = task.file_name;
 
@@ -416,22 +517,83 @@
     const totMb = task.total_bytes ? (task.total_bytes / (1024 * 1024)).toFixed(1) : "--";
     const eta = task.eta_seconds ? `${task.eta_seconds}s left` : "";
 
-    if (speedEl) {
+    // Minimized title status
+    if (titleEl) {
       if (task.status === "completed") {
-        speedEl.innerHTML = `<span style="color: #34d399; font-weight: 700;">✅ Download Complete! Saved to Downloads/SIDM</span>`;
-        if (barEl) {
-          barEl.style.width = "100%";
-          barEl.style.background = "linear-gradient(90deg, #10b981, #34d399)";
-        }
-        if (activeTaskPoll) clearInterval(activeTaskPoll);
-        activeTaskPoll = null;
-      } else if (task.status === "failed") {
-        speedEl.innerHTML = `<span style="color: #f87171;">❌ Download error: ${task.error_message || "Failed"}</span>`;
-        if (activeTaskPoll) clearInterval(activeTaskPoll);
-        activeTaskPoll = null;
+        titleEl.textContent = "✅ Downloaded";
+      } else if (card.classList.contains("sidm-minimized")) {
+        titleEl.textContent = `⚡ SIDM: ${percent.toFixed(0)}% (${speedMb} MB/s)`;
       } else {
-        speedEl.textContent = `🚀 ${speedMb} MB/s (${currMb} / ${totMb} MB) ${eta} [32 Thds]`;
+        titleEl.textContent = "⚡ SIDM Turbo Downloader";
       }
+    }
+
+    if (task.status === "completed") {
+      if (barEl) {
+        barEl.style.width = "100%";
+        barEl.style.background = "linear-gradient(90deg, #10b981, #34d399)";
+      }
+      if (speedEl) {
+        speedEl.innerHTML = `<span style="color: #34d399; font-weight: 700;">✅ Download Complete! (${currMb} MB)</span>`;
+      }
+      if (percentEl) {
+        percentEl.textContent = "100%";
+        percentEl.style.color = "#34d399";
+      }
+
+      if (completeArea && completeArea.style.display === "none") {
+        completeArea.style.display = "flex";
+        completeArea.style.flexDirection = "column";
+        completeArea.style.gap = "8px";
+
+        const savePath = task.save_path || "~/Downloads/SIDM";
+        const displayPath = savePath.length > 40 ? "..." + savePath.slice(-37) : savePath;
+
+        completeArea.innerHTML = `
+          <div class="sidm-card-location" title="${savePath}">
+            <strong>📁 Location:</strong> <span>${displayPath}</span>
+          </div>
+          <div class="sidm-card-btn-row">
+            <button class="sidm-action-btn sidm-btn-folder" id="sidmOpenFolderBtn" title="Open containing folder in file manager">
+              <span>📂</span> Open Folder
+            </button>
+            <button class="sidm-action-btn sidm-btn-play" id="sidmOpenFileBtn" title="Play video file">
+              <span>▶️</span> Open Video
+            </button>
+          </div>
+        `;
+
+        const openFolderBtn = document.getElementById("sidmOpenFolderBtn");
+        if (openFolderBtn) {
+          openFolderBtn.onclick = (e) => {
+            e.stopPropagation();
+            openTaskFolder(task.id);
+            openFolderBtn.innerHTML = "<span>✅</span> Folder Opened!";
+            setTimeout(() => { openFolderBtn.innerHTML = "<span>📂</span> Open Folder"; }, 2000);
+          };
+        }
+
+        const openFileBtn = document.getElementById("sidmOpenFileBtn");
+        if (openFileBtn) {
+          openFileBtn.onclick = (e) => {
+            e.stopPropagation();
+            openTaskFile(task.id);
+            openFileBtn.innerHTML = "<span>▶️</span> Playing...";
+            setTimeout(() => { openFileBtn.innerHTML = "<span>▶️</span> Open Video"; }, 2000);
+          };
+        }
+      }
+
+      if (activeTaskPoll) clearInterval(activeTaskPoll);
+      activeTaskPoll = null;
+    } else if (task.status === "failed") {
+      if (speedEl) {
+        speedEl.innerHTML = `<span style="color: #f87171;">❌ Download error: ${task.error_message || "Failed"}</span>`;
+      }
+      if (activeTaskPoll) clearInterval(activeTaskPoll);
+      activeTaskPoll = null;
+    } else if (speedEl) {
+      speedEl.textContent = `🚀 ${speedMb} MB/s (${currMb} / ${totMb} MB) ${eta} [32 Thds]`;
     }
   }
 
