@@ -232,7 +232,7 @@
           <span class="sidm-format-icon">🎬</span>
           <div class="sidm-format-info">
             <span class="sidm-format-title">1080p Full HD</span>
-            <span class="sidm-format-sub">60 FPS (Recommended)</span>
+            <span class="sidm-format-sub">Premiere Pro Ready • MP4</span>
           </div>
         </div>
         <div class="sidm-item" data-format="best_720p">

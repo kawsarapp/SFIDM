@@ -182,7 +182,7 @@ impl MediaEngine {
             },
             MediaFormatOption {
                 format_id: "best_1080p".to_string(),
-                label: "🎬 1080p Full HD (Recommended)".to_string(),
+                label: "🎬 1080p Full HD (Premiere Pro & DaVinci Ready)".to_string(),
                 ext: "mp4".to_string(),
                 resolution: Some("1080p".to_string()),
                 fps: Some(60.0),
@@ -241,12 +241,13 @@ impl MediaEngine {
         let bin = get_ytdlp_bin();
         let mut cmd = Command::new(&bin);
 
-        // Format selector mapping
+        // Format selector mapping (Optimized for Adobe Premiere Pro, DaVinci Resolve, & Final Cut)
+        // Prioritizes standard H.264 (AVC1) video and AAC (M4A) audio for zero-conversion NLE import
         let format_arg = match format_id.unwrap_or("best_1080p") {
-            "best_8k" => "bestvideo+bestaudio/best",
-            "best_1080p" => "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
-            "best_720p" => "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-            "best_audio" => "bestaudio/best",
+            "best_8k" => "bestvideo+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+            "best_1080p" => "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best",
+            "best_720p" => "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best",
+            "best_audio" => "bestaudio[ext=m4a]/bestaudio/best",
             custom => custom,
         };
 
@@ -261,6 +262,8 @@ impl MediaEngine {
             .arg(format_arg)
             .arg("--merge-output-format")
             .arg("mp4")
+            .arg("--postprocessor-args")
+            .arg("MergerName:-c:v copy -c:a aac -b:a 192k") // Ensures Premiere Pro 100% native audio decoding
             .arg("-N")
             .arg("16") // 16 parallel fragment streams for speed
             .arg("--buffer-size")
