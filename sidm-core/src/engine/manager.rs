@@ -157,6 +157,10 @@ impl TaskManager {
             }
         };
 
+        println!("\n📥 [SIDM] New Download Task Started: {}", task.url);
+        println!("   Type: {:?} | Format: {:?} | Threads: {}", task.download_type, format_id, task.connections);
+        println!("   Destination: {}", save_path);
+
         match task.download_type {
             DownloadType::MediaStream => {
                 // Media Engine with yt-dlp + FFmpeg
@@ -199,6 +203,7 @@ impl TaskManager {
                 .await
                 {
                     Ok(_) => {
+                        println!("✅ [SIDM] Media Download Completed! Saved to folder: {}", save_path);
                         let mut map = tasks.write().await;
                         if let Some(t) = map.get_mut(&id) {
                             t.status = DownloadStatus::Completed;
@@ -207,6 +212,7 @@ impl TaskManager {
                         let _ = event_tx.send(DownloadEvent::TaskCompleted { id, save_path });
                     }
                     Err(e) => {
+                        eprintln!("❌ [SIDM] Media Download Error: {}", e);
                         let mut map = tasks.write().await;
                         if let Some(t) = map.get_mut(&id) {
                             t.status = DownloadStatus::Failed;

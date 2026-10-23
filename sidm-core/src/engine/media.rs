@@ -9,10 +9,13 @@ pub struct MediaEngine;
 
 fn get_ytdlp_bin() -> String {
     let candidates = [
-        "sidm-core/bin/yt-dlp",
+        "/home/kawsar/Documents/Github/Repo/SIDM/bin/yt-dlp",
+        "/home/kawsar/Documents/Github/Repo/SIDM/sidm-core/bin/yt-dlp",
         "./bin/yt-dlp",
+        "./sidm-core/bin/yt-dlp",
         "bin/yt-dlp",
-        "./yt-dlp",
+        "sidm-core/bin/yt-dlp",
+        "yt-dlp",
     ];
     for c in &candidates {
         if std::path::Path::new(c).exists() {
@@ -21,9 +24,11 @@ fn get_ytdlp_bin() -> String {
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let p = parent.join("bin").join("yt-dlp");
-            if p.exists() {
-                return p.to_string_lossy().to_string();
+            for sub in &["bin/yt-dlp", "../bin/yt-dlp", "../../bin/yt-dlp"] {
+                let p = parent.join(sub);
+                if p.exists() {
+                    return p.to_string_lossy().to_string();
+                }
             }
         }
     }
@@ -41,14 +46,15 @@ impl MediaEngine {
             .arg(url);
 
         if let Some(cookie_str) = cookies {
-            if !cookie_str.is_empty() {
+            if cookie_str.len() > 10 && !cookie_str.contains('\n') {
                 cmd.arg("--add-header").arg(format!("Cookie: {}", cookie_str));
             }
         }
 
         let output = cmd.output().await.map_err(|e| {
             anyhow!(
-                "Failed to run yt-dlp. Make sure yt-dlp is installed on your system. Error: {}",
+                "Failed to run yt-dlp ({}). Error: {}",
+                bin,
                 e
             )
         })?;
@@ -83,7 +89,6 @@ impl MediaEngine {
 
         let mut formats = Vec::new();
 
-        // Extract available formats and simplify for the user
         if let Some(formats_arr) = json_val.get("formats").and_then(|v| v.as_array()) {
             for f in formats_arr {
                 let format_id = f.get("format_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
@@ -145,7 +150,6 @@ impl MediaEngine {
             }
         }
 
-        // Add standard smart presets at the top
         let mut smart_presets = vec![
             MediaFormatOption {
                 format_id: "best_8k".to_string(),
@@ -193,7 +197,6 @@ impl MediaEngine {
             },
         ];
 
-        // Deduplicate or append specific video formats
         smart_presets.extend(formats);
 
         Ok(MediaInspectResult {
@@ -206,7 +209,7 @@ impl MediaEngine {
         })
     }
 
-    /// Download media with yt-dlp + concurrent connections (-N 8) + ffmpeg muxing
+    /// Download media with yt-dlp + concurrent fragment streams + ffmpeg muxing
     pub async fn download<F>(
         url: &str,
         save_path: &Path,
@@ -229,22 +232,26 @@ impl MediaEngine {
             custom => custom,
         };
 
+        // Determine destination directory and filename template
+        let save_dir = save_path.parent().unwrap_or_else(|| Path::new("."));
+        let _ = std::fs::create_dir_all(save_dir);
+
+        // Output template: saves into target folder with video title
+        let output_template = format!("{}/%(title)s.%(ext)s", save_dir.to_string_lossy());
+
         cmd.arg("-f")
             .arg(format_arg)
             .arg("--merge-output-format")
             .arg("mp4")
             .arg("-N")
-            .arg("16") // 16 parallel fragment streams for extreme speed!
+            .arg("16") // 16 parallel fragment streams for speed
             .arg("--buffer-size")
             .arg("16M")
-            .arg("--http-chunk-size")
-            .arg("10M")
-            .arg("--concurrent-fragments")
-            .arg("16")
+            .arg("--no-playlist")
             .arg("--newline")
             .arg("--progress")
             .arg("-o")
-            .arg(save_path.to_str().unwrap_or("download.mp4"))
+            .arg(&output_template)
             .arg(url);
 
         if format_id == Some("best_audio") {
@@ -252,7 +259,7 @@ impl MediaEngine {
         }
 
         if let Some(cookie_str) = cookies {
-            if !cookie_str.is_empty() {
+            if cookie_str.len() > 10 && !cookie_str.contains('\n') {
                 cmd.arg("--add-header").arg(format!("Cookie: {}", cookie_str));
             }
         }
@@ -260,7 +267,7 @@ impl MediaEngine {
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         let mut child = cmd.spawn().map_err(|e| {
-            anyhow!("Failed to start media download process: {}", e)
+            anyhow!("Failed to start yt-dlp at '{}': {}", bin, e)
         })?;
 
         let stdout = child.stdout.take().ok_or_else(|| anyhow!("No stdout"))?;
@@ -308,7 +315,7 @@ impl MediaEngine {
 
         let status = child.wait().await?;
         if !status.success() {
-            return Err(anyhow!("Media download process failed with status {}", status));
+            return Err(anyhow!("Media download process failed with exit code: {}", status));
         }
 
         Ok(())

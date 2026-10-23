@@ -48,9 +48,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request.payload)
     })
-      .then((res) => res.json())
-      .then((data) => sendResponse({ success: true, data }))
-      .catch((err) => sendResponse({ success: false, error: err.message }));
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          sendResponse({ success: false, error: data.error || `Server HTTP ${res.status}` });
+        } else {
+          sendResponse({ success: true, data });
+        }
+      })
+      .catch((err) => {
+        console.error("SIDM fetch error:", err);
+        sendResponse({
+          success: false,
+          error: "SIDM Engine is offline! Make sure './start_sidm.sh' is running in your terminal."
+        });
+      });
     return true; // Keep message channel open for async response
   }
 

@@ -63,12 +63,10 @@
 
   // --- 2. Facebook Dedicated Handler ---
   function attachFacebook() {
-    // Facebook videos in feed, watch, and reels
     const fbVideos = document.querySelectorAll("video");
     fbVideos.forEach((vid) => {
       if (vid.hasAttribute(PROCESSED_ATTR)) return;
 
-      // Find suitable container: closest player wrapper or parent
       const container = vid.closest('[role="dialog"]') ||
                         vid.closest('[data-video-id]') ||
                         vid.parentElement;
@@ -76,7 +74,6 @@
       if (container && !container.querySelector(".sidm-floating-badge")) {
         vid.setAttribute(PROCESSED_ATTR, "true");
         createBadge(container, () => {
-          // Check if parent has a permalink or use current URL
           const link = container.closest("a[href*='/watch'], a[href*='/reel'], a[href*='/videos/']");
           return link ? link.href : window.location.href;
         }, "facebook");
@@ -90,7 +87,6 @@
     allVideos.forEach((video) => {
       if (video.hasAttribute(PROCESSED_ATTR)) return;
 
-      // Filter out tiny videos (ads, tracking pixels, avatars < 120px)
       const rect = video.getBoundingClientRect();
       if (rect.width < 140 || rect.height < 100) return;
 
@@ -100,7 +96,6 @@
       video.setAttribute(PROCESSED_ATTR, "true");
 
       createBadge(parent, () => {
-        // Return video src, source tags, or page URL
         if (video.src && !video.src.startsWith("blob:")) {
           return video.src;
         }
@@ -117,7 +112,6 @@
   function createBadge(container, getTargetUrl, platform) {
     if (container.querySelector(".sidm-floating-badge")) return;
 
-    // Ensure container has relative/absolute positioning so badge anchors properly
     const computed = window.getComputedStyle(container);
     if (computed.position === "static") {
       container.style.position = "relative";
@@ -126,20 +120,24 @@
     const badge = document.createElement("div");
     badge.className = "sidm-floating-badge";
     badge.innerHTML = `
-      <div class="sidm-badge-trigger" title="Download video with SIDM">
-        <span class="sidm-icon">⚡</span>
-        <span class="sidm-label">Download Video</span>
-        <span class="sidm-arrow">▼</span>
+      <div class="sidm-badge-trigger">
+        <div class="sidm-btn-main" title="Click to 1-Click Download (1080p Full HD)">
+          <span class="sidm-icon">⚡</span>
+          <span class="sidm-label">Download Video</span>
+        </div>
+        <div class="sidm-btn-arrow" title="Choose Resolution (4K, 720p, MP3)">
+          <span class="sidm-arrow">▼</span>
+        </div>
       </div>
       <div class="sidm-dropdown" style="display: none;">
         <div class="sidm-dropdown-header">
-          <span>⚡ SIDM Video Downloader</span>
+          <span>⚡ Select Video Quality</span>
         </div>
         <div class="sidm-item" data-format="best_8k">
           <span class="sidm-format-icon">🌟</span>
           <div class="sidm-format-info">
             <span class="sidm-format-title">8K / 4K UHD</span>
-            <span class="sidm-format-sub">Best Available Stream</span>
+            <span class="sidm-format-sub">Highest Available Stream</span>
           </div>
         </div>
         <div class="sidm-item" data-format="best_1080p">
@@ -166,11 +164,30 @@
       </div>
     `;
 
-    const trigger = badge.querySelector(".sidm-badge-trigger");
+    const btnMain = badge.querySelector(".sidm-btn-main");
+    const btnArrow = badge.querySelector(".sidm-btn-arrow");
     const dropdown = badge.querySelector(".sidm-dropdown");
 
-    // Toggle dropdown
-    trigger.addEventListener("click", (e) => {
+    // 1-Click Download when clicking main button
+    btnMain.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      const label = btnMain.querySelector(".sidm-label");
+      const origText = label.textContent;
+      label.textContent = "⏳ Starting...";
+
+      const targetUrl = getTargetUrl();
+      startDownload(targetUrl, "best_1080p", () => {
+        label.textContent = "✅ Started!";
+        setTimeout(() => { label.textContent = origText; }, 2500);
+      }, () => {
+        label.textContent = origText;
+      });
+    });
+
+    // Arrow toggles dropdown
+    btnArrow.addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
 
@@ -201,8 +218,8 @@
     container.appendChild(badge);
   }
 
-  function startDownload(url, formatId) {
-    showToast("info", "🚀 Sending to SIDM Engine (32 Turbo Threads)...");
+  function startDownload(url, formatId, onSuccess, onError) {
+    showToast("info", "🚀 Connecting to SIDM Engine (32 Turbo Threads)...");
 
     chrome.runtime.sendMessage(
       {
@@ -217,8 +234,11 @@
       (res) => {
         if (res && res.success && res.data && res.data.success) {
           showToast("success", "✅ Download started in SIDM!");
+          if (onSuccess) onSuccess();
         } else {
-          showToast("error", `❌ SIDM error: ${res ? res.error : "Is SIDM running?"}`);
+          const errMsg = (res && res.error) ? res.error : "Make sure SIDM Engine is running! Run ./start_sidm.sh";
+          showToast("error", `❌ ${errMsg}`);
+          if (onError) onError();
         }
       }
     );
@@ -236,7 +256,7 @@
 
     setTimeout(() => {
       toast.className = "sidm-toast";
-    }, 4000);
+    }, 4500);
   }
 
   // Listen to background toast events
