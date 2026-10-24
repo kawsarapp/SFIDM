@@ -53,42 +53,36 @@ SIDM/
 
 ## 🚀 Quick Start Guide
 
-### 1. Run the SIDM Core Engine & Dashboard
+### 🐧 Option A: 1-Click Install on Linux (Zorin OS / Ubuntu / Debian / Mint)
+
+Install the pre-built `.deb` package directly:
+```bash
+sudo apt install ./dist/sidm_1.1.0_amd64.deb
+```
+This registers **SIDM** in your system applications launcher. You can launch it from your desktop menu or by typing `sidm` in terminal!
+
+---
+
+### 💻 Option B: Quick Run from Terminal
 
 ```bash
-cd sidm-core
-cargo run --release -- server
-```
-Or use the pre-built binary:
-```bash
-./sidm-core/target/debug/sidm-core server
+# On Linux / macOS:
+./start_sidm.sh
+
+# On Windows:
+double-click start_sidm.bat
 ```
 
-The server will start at:
+The engine starts at:
 - **Web Dashboard:** [http://127.0.0.1:45678/](http://127.0.0.1:45678/)
 - **Health Endpoint:** [http://127.0.0.1:45678/health](http://127.0.0.1:45678/health)
-- **API Endpoints:** `http://127.0.0.1:45678/api/downloads`
+- **Downloads Directory:** `~/Downloads/SIDM/` (auto-sorted into `Videos/`, `Music/`, `Compressed/`, `Programs/`, `Documents/`)
 
 ---
 
-### 2. Command-Line Direct Download (Turbo Mode)
+### 🔌 Install Browser Extension (Chrome / Edge / Brave / Opera)
 
-You can download any file directly from your terminal using up to 32 parallel threads:
-
-```bash
-# Download with 16 connections
-./sidm-core/target/debug/sidm-core download "https://example.com/largefile.zip" -c 16
-
-# Inspect available resolutions for a YouTube or Facebook video
-./sidm-core/target/debug/sidm-core inspect "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-```
-
----
-
-### 3. Install the Browser Extension (Chrome / Edge / Brave)
-
-1. Open your browser and go to `chrome://extensions/` (or `edge://extensions/`).
-2. Enable **"Developer mode"** (top right corner toggle).
-3. Click **"Load unpacked"**.
-4. Select the `sidm-extension` folder located inside this repository.
-5. Done! The **SIDM Integration Module** icon will appear in your browser toolbar, and a floating **"Download with SIDM"** badge will automatically appear on YouTube and video pages!
+1. Open your browser and navigate to `chrome://extensions/` (or `edge://extensions/`, `brave://extensions/`).
+2. Toggle on **"Developer mode"** (top right corner).
+3. Click **"Load unpacked"** and select the `sidm-extension` folder inside this repository (or unzip `dist/sidm-extension-v1.1.0.zip`).
+4. Done! The **⚡ SIDM Turbo Downloader** floating badge will now automatically appear on Facebook, YouTube, TikTok, and video websites!

@@ -107,3 +107,30 @@ pub struct InspectRequest {
     pub url: String,
     pub cookies: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct PlaylistInspectRequest {
+    pub url: String,
+    pub cookies: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaylistItem {
+    pub id: String,
+    pub title: String,
+    pub url: String,
+    pub duration_seconds: Option<u64>,
+    pub thumbnail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaylistInspectResult {
+    pub title: String,
+    pub count: usize,
+    pub items: Vec<PlaylistItem>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BatchDownloadRequest {
+    pub items: Vec<CreateDownloadRequest>,
+}

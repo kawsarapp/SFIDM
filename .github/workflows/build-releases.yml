@@ -21,11 +21,20 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Download Windows yt-dlp.exe
+      - name: Download Windows yt-dlp.exe & static FFmpeg (Video/Audio Merger)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "bin"
           Invoke-WebRequest -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" -OutFile "bin/yt-dlp.exe"
+          
+          # Download static ffmpeg and ffprobe for Windows
+          Write-Host "Downloading static FFmpeg for Windows..."
+          Invoke-WebRequest -Uri "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg-temp" -Force
+          Get-ChildItem -Path "ffmpeg-temp" -Recurse -Filter "ffmpeg.exe" | ForEach-Object { Copy-Item $_.FullName "bin/ffmpeg.exe" -Force }
+          Get-ChildItem -Path "ffmpeg-temp" -Recurse -Filter "ffprobe.exe" | ForEach-Object { Copy-Item $_.FullName "bin/ffprobe.exe" -Force }
+          Remove-Item -Recurse -Force "ffmpeg-temp"
+          Remove-Item -Force "ffmpeg.zip"
 
       - name: Build SIDM Core (Windows x64)
         run: |
@@ -47,23 +56,26 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "dist"
-          $portableDir = "dist/SIDM_v1.0.0_Portable"
+          $portableDir = "dist/SIDM_v1.1.0_Portable"
           New-Item -ItemType Directory -Force -Path $portableDir
+          New-Item -ItemType Directory -Force -Path "$portableDir/bin"
           Copy-Item "sidm-core/target/release/sidm-core.exe" "$portableDir/sidm-core.exe"
-          Copy-Item "bin/yt-dlp.exe" "$portableDir/yt-dlp.exe"
+          Copy-Item "bin/yt-dlp.exe" "$portableDir/bin/yt-dlp.exe"
+          Copy-Item "bin/ffmpeg.exe" "$portableDir/bin/ffmpeg.exe"
+          Copy-Item "bin/ffprobe.exe" "$portableDir/bin/ffprobe.exe"
           Copy-Item "start_sidm.bat" "$portableDir/start_sidm.bat"
           Copy-Item "start_sidm.ps1" "$portableDir/start_sidm.ps1"
           Copy-Item -Recurse "sidm-extension" "$portableDir/sidm-extension"
           Copy-Item -Recurse "installer" "$portableDir/installer"
-          Compress-Archive -Path "$portableDir/*" -DestinationPath "dist/SIDM_v1.0.0_Portable_Windows_x64.zip" -Force
+          Compress-Archive -Path "$portableDir/*" -DestinationPath "dist/SIDM_v1.1.0_Portable_Windows_x64.zip" -Force
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-assets
           path: |
-            dist/SIDM_v1.0.0_Setup.exe
-            dist/SIDM_v1.0.0_Portable_Windows_x64.zip
+            dist/SIDM_v1.1.0_Setup.exe
+            dist/SIDM_v1.1.0_Portable_Windows_x64.zip
 
   build-linux:
     name: Build Linux (.deb Package & Tarball)
@@ -91,22 +103,24 @@ jobs:
           chmod +x installer/build_deb.sh
           ./installer/build_deb.sh
 
-      - name: Create Linux Tarball Package (.tar.gz)
+      - name: Create Linux Tarball Package (.tar.gz) & Extension Zip
         run: |
-          mkdir -p dist/sidm_1.0.0_linux_x64
-          cp sidm-core/target/release/sidm-core dist/sidm_1.0.0_linux_x64/
-          cp bin/yt-dlp dist/sidm_1.0.0_linux_x64/
-          cp start_sidm.sh dist/sidm_1.0.0_linux_x64/
-          cp -r sidm-extension dist/sidm_1.0.0_linux_x64/
-          tar -czf dist/sidm_1.0.0_linux_x64.tar.gz -C dist sidm_1.0.0_linux_x64
+          mkdir -p dist/sidm_1.1.0_linux_x64
+          cp sidm-core/target/release/sidm-core dist/sidm_1.1.0_linux_x64/
+          cp bin/yt-dlp dist/sidm_1.1.0_linux_x64/
+          cp start_sidm.sh dist/sidm_1.1.0_linux_x64/
+          cp -r sidm-extension dist/sidm_1.1.0_linux_x64/
+          tar -czf dist/sidm_1.1.0_linux_x64.tar.gz -C dist sidm_1.1.0_linux_x64
+          (cd sidm-extension && zip -r ../dist/sidm-extension-v1.1.0.zip ./*)
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-assets
           path: |
+            dist/sidm_1.1.0_amd64.deb
             dist/sidm_1.0.0_amd64.deb
-            dist/sidm_1.0.0_linux_x64.tar.gz
+            dist/sidm_1.1.0_linux_x64.tar.gz
 
   publish-release:
     name: Publish Multi-Platform GitHub Release
@@ -132,33 +146,34 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0
-          name: "⚡ SIDM v1.0.0 Official Release (Windows & Linux)"
+          tag_name: v1.1.0
+          name: "⚡ SIDM v1.1.0 Hybrid Release (Windows & Linux)"
           body: |
-            ## ⚡ SIDM - Smart Internet Download Manager (v1.0.0)
+            ## ⚡ SIDM - Smart Internet Download Manager (v1.1.0)
 
-            The ultimate high-speed Internet Download Manager with modern multi-stream acceleration and universal video extraction.
+            Commercial-grade high-speed Internet Download Manager with modern multi-stream acceleration, universal video sniffer, playlist batch downloading, session cookie harvesting, and OS integration.
 
             ### 🚀 Highlights:
-            - **Extreme 32-64 Thread Multi-Segment Engine**: 16x speed acceleration surpassing traditional IDM.
-            - **Universal Browser Floating Button**: 1-click video downloader for YouTube, Facebook Reels/Videos, TikTok, and HTML5 video.
-            - **Draggable & Minimizable Live Progress Card**: Floating on-screen IDM progress card with live speed, ETA, and progress bar.
-            - **1-Click Open Folder & Video**: Direct integration with desktop file explorers & default media players.
-            - **Adobe Premiere Pro Ready**: Native H.264 MP4 & AAC 192kbps encoding for direct zero-conversion NLE video editing.
-            - **Auto-Browser Registration**: Seamlessly integrates with Google Chrome, Microsoft Edge, and Brave.
-            - **HWID Pro Licensing**: Lifetime & annual commercial licensing engine with 14-day Pro trial.
+            - **🍪 Active Session Cookie Extractor**: Seamless 1-click downloading of private Facebook groups, reels, stories, age-restricted YouTube, and login-protected platform videos.
+            - **📑 Playlist Batch Downloader**: Instant inspection and 1-click batch downloading of full YouTube & social media playlists with uniform resolution picker.
+            - **🎯 Universal Zero-Block Stream Engine**: Downloads at up to 16x turbo speeds without hitting YouTube/Facebook 429 rate-limits or bot blocks.
+            - **🎵 Studio-Quality 320kbps MP3 Extractor**: 1-click audio extraction with embedded original cover art and ID3 metadata.
+            - **📁 Auto-Category Folder Sorter**: Organizes downloads into dedicated `Videos/`, `Music/`, `Compressed/`, `Programs/`, and `Documents/` directories.
+            - **📋 Smart In-Browser Clipboard Monitor**: Non-intrusive floating pill detects copied download links for immediate 1-click downloading.
+            - **🔔 Native OS Toast Notifications & Sound**: Native Windows Action Center & Linux desktop notifications with pleasant dual-tone completion chime.
+            - **🎬 Premiere Pro & DaVinci Ready**: Standard H.264 MP4 & AAC audio for zero-transcode NLE editing.
 
             ---
 
             ### 📥 Downloads:
 
             #### 🪟 Windows (Windows 10 / 11):
-            - **`SIDM_v1.0.0_Setup.exe`** — **Recommended for Windows users**. Single-click installer with automatic browser integration.
-            - **`SIDM_v1.0.0_Portable_Windows_x64.zip`** — Standalone portable archive (no installation required).
+            - **`SIDM_v1.1.0_Setup.exe`** — **Recommended for Windows users**. Single-click installer with automatic browser integration and bundled FFmpeg.
+            - **`SIDM_v1.1.0_Portable_Windows_x64.zip`** — Standalone portable archive (no installation required).
 
-            #### 🐧 Linux (Ubuntu / Debian / Linux Mint / Pop!_OS):
-            - **`sidm_1.0.0_amd64.deb`** — **Recommended for Debian/Ubuntu users**. Double-click or `sudo dpkg -i sidm_1.0.0_amd64.deb`.
-            - **`sidm_1.0.0_linux_x64.tar.gz`** — Generic standalone Linux x64 portable archive.
+            #### 🐧 Linux (Zorin OS / Ubuntu / Debian / Linux Mint):
+            - **`sidm_1.1.0_amd64.deb`** — **Recommended for Debian/Ubuntu users**. Double-click or `sudo dpkg -i sidm_1.1.0_amd64.deb`.
+            - **`sidm_1.1.0_linux_x64.tar.gz`** — Standalone Linux x64 portable archive.
           draft: false
           prerelease: false
           files: |

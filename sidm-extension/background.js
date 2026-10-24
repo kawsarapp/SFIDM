@@ -1,5 +1,22 @@
 const SIDM_API = "http://127.0.0.1:45678";
 
+// Helper: Extract cookies for target URL or domain (including HttpOnly session cookies)
+async function getCookiesForUrl(urlStr) {
+  if (!urlStr || urlStr.startsWith("blob:") || urlStr.startsWith("data:")) return null;
+  try {
+    const urlObj = new URL(urlStr);
+    let cookies = await chrome.cookies.getAll({ url: urlStr });
+    if (!cookies || cookies.length === 0) {
+      cookies = await chrome.cookies.getAll({ domain: urlObj.hostname });
+    }
+    if (!cookies || cookies.length === 0) return null;
+    return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+  } catch (err) {
+    console.warn("SIDM: Failed to retrieve cookies for", urlStr, err);
+    return null;
+  }
+}
+
 // Register context menus on install
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -20,13 +37,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const targetUrl = info.linkUrl || info.srcUrl || info.pageUrl;
   if (!targetUrl) return;
 
+  const cookies = await getCookiesForUrl(targetUrl);
+
   try {
     const res = await fetch(`${SIDM_API}/api/downloads`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: targetUrl,
-        connections: 16
+        connections: 16,
+        cookies: cookies || undefined
       })
     });
     const data = await res.json();
@@ -43,26 +63,38 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // Listen to messages from content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "SEND_TO_SIDM") {
-    fetch(`${SIDM_API}/api/downloads`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request.payload)
-    })
-      .then(async (res) => {
+    (async () => {
+      let payload = request.payload || {};
+      if (!payload.cookies) {
+        const targetUrl = payload.url && payload.url.startsWith("http") ? payload.url : sender.tab?.url;
+        if (targetUrl) {
+          const cookies = await getCookiesForUrl(targetUrl);
+          if (cookies) {
+            payload.cookies = cookies;
+          }
+        }
+      }
+
+      try {
+        const res = await fetch(`${SIDM_API}/api/downloads`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           sendResponse({ success: false, error: data.error || `Server HTTP ${res.status}` });
         } else {
           sendResponse({ success: true, data });
         }
-      })
-      .catch((err) => {
-        console.error("SIDM fetch error:", err);
+      } catch (err) {
+        console.warn("SIDM backend unreachable:", err.message);
         sendResponse({
           success: false,
-          error: "SIDM Engine is offline! Make sure './start_sidm.sh' is running in your terminal."
+          error: "SIDM Engine is offline! Make sure SIDM is running."
         });
-      });
+      }
+    })();
     return true; // Keep message channel open for async response
   }
 
@@ -104,13 +136,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "INSPECT_MEDIA") {
-    fetch(`${SIDM_API}/api/inspect`, {
+    (async () => {
+      let cookies = request.cookies;
+      if (!cookies && request.url) {
+        cookies = await getCookiesForUrl(request.url);
+      }
+      fetch(`${SIDM_API}/api/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: request.url, cookies: cookies || undefined })
+      })
+        .then((res) => res.json())
+        .then((data) => sendResponse({ success: true, data }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+    })();
+    return true;
+  }
+
+  if (request.action === "INSPECT_PLAYLIST") {
+    (async () => {
+      let cookies = request.cookies;
+      if (!cookies && request.url) {
+        cookies = await getCookiesForUrl(request.url);
+      }
+      fetch(`${SIDM_API}/api/playlist/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: request.url, cookies: cookies || undefined })
+      })
+        .then((res) => res.json())
+        .then((data) => sendResponse(data))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+    })();
+    return true;
+  }
+
+  if (request.action === "BATCH_DOWNLOAD") {
+    fetch(`${SIDM_API}/api/downloads/batch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: request.url })
+      body: JSON.stringify(request.payload)
     })
       .then((res) => res.json())
-      .then((data) => sendResponse({ success: true, data }))
+      .then((data) => sendResponse(data))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }

@@ -38,6 +38,9 @@
         activeDropdown = null;
       }
     });
+
+    // Smart Clipboard Monitor
+    setupClipboardWatcher();
   }
 
   function handleVideoPlay(video) {
@@ -205,6 +208,14 @@
       container.style.position = "relative";
     }
 
+    const hasPlaylist = window.location.search.includes("list=") || window.location.pathname.includes("/playlist");
+    const playlistBtnHtml = hasPlaylist ? `
+        <div class="sidm-btn-playlist" title="Batch Download Entire Playlist with SIDM">
+          <span class="sidm-icon">📑</span>
+          <span class="sidm-label">Playlist</span>
+        </div>
+    ` : "";
+
     const badge = document.createElement("div");
     badge.className = "sidm-floating-badge";
     badge.innerHTML = `
@@ -213,6 +224,7 @@
           <span class="sidm-icon">⚡</span>
           <span class="sidm-label">Download Video</span>
         </div>
+        ${playlistBtnHtml}
         <div class="sidm-btn-arrow" title="Choose Resolution (8K, 4K, 720p, MP3)">
           <span class="sidm-arrow">▼</span>
         </div>
@@ -253,8 +265,17 @@
     `;
 
     const btnMain = badge.querySelector(".sidm-btn-main");
+    const btnPlaylist = badge.querySelector(".sidm-btn-playlist");
     const btnArrow = badge.querySelector(".sidm-btn-arrow");
     const dropdown = badge.querySelector(".sidm-dropdown");
+
+    if (btnPlaylist) {
+      btnPlaylist.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        openPlaylistModal(window.location.href);
+      });
+    }
 
     // 1-Click direct download
     btnMain.addEventListener("click", (e) => {
@@ -329,6 +350,7 @@
     card.classList.remove("sidm-minimized");
     card.style.setProperty("display", "block", "important");
     card.style.setProperty("visibility", "visible", "important");
+    card.style.setProperty("height", "auto", "important");
 
     card.innerHTML = `
       <div class="sidm-card-header" id="sidmCardHeader" title="Drag to move card anywhere">
@@ -418,10 +440,11 @@
       initialLeft = rect.left;
       initialTop = rect.top;
 
-      card.style.bottom = "auto";
-      card.style.right = "auto";
-      card.style.left = `${initialLeft}px`;
-      card.style.top = `${initialTop}px`;
+      card.style.setProperty("bottom", "auto", "important");
+      card.style.setProperty("right", "auto", "important");
+      card.style.setProperty("height", "auto", "important");
+      card.style.setProperty("left", `${initialLeft}px`, "important");
+      card.style.setProperty("top", `${initialTop}px`, "important");
       header.style.cursor = "grabbing";
 
       const onMouseMove = (moveEvent) => {
@@ -438,8 +461,8 @@
         newLeft = Math.max(10, Math.min(maxLeft, newLeft));
         newTop = Math.max(10, Math.min(maxTop, newTop));
 
-        card.style.left = `${newLeft}px`;
-        card.style.top = `${newTop}px`;
+        card.style.setProperty("left", `${newLeft}px`, "important");
+        card.style.setProperty("top", `${newTop}px`, "important");
       };
 
       const onMouseUp = () => {
@@ -461,7 +484,6 @@
           { action: "GET_TASK_STATUS", taskId: taskId },
           (res) => {
             if (chrome.runtime.lastError || !res || !res.task) {
-              directBridgeFetchStatus(taskId);
               return;
             }
             updateLiveCard(res.task);
@@ -470,29 +492,19 @@
         return;
       } catch (e) {}
     }
-    directBridgeFetchStatus(taskId);
-  }
-
-  function directBridgeFetchStatus(taskId) {
-    const url = taskId ? `${SIDM_BRIDGE_HTTP}/api/downloads/${taskId}` : `${SIDM_BRIDGE_HTTP}/api/downloads`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((data) => {
-        const task = taskId ? data.task : (Array.isArray(data) && data.length > 0 ? data[0] : null);
-        if (task) updateLiveCard(task);
-      })
-      .catch(() => {});
   }
 
   function openTaskFolder(taskId) {
-    const url = taskId ? `${SIDM_BRIDGE_HTTP}/api/downloads/${taskId}/open-folder` : `${SIDM_BRIDGE_HTTP}/api/open-folder`;
-    fetch(url, { method: "POST" }).catch((e) => console.error("Error opening folder:", e));
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
+      chrome.runtime.sendMessage({ action: "OPEN_TASK_FOLDER", taskId: taskId });
+    }
   }
 
   function openTaskFile(taskId) {
     if (!taskId) return;
-    fetch(`${SIDM_BRIDGE_HTTP}/api/downloads/${taskId}/open-file`, { method: "POST" })
-      .catch((e) => console.error("Error opening file:", e));
+    if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
+      chrome.runtime.sendMessage({ action: "OPEN_TASK_FILE", taskId: taskId });
+    }
   }
 
   function updateLiveCard(task) {
@@ -542,6 +554,7 @@
       }
 
       if (completeArea && completeArea.style.display === "none") {
+        playCompletionChime();
         completeArea.style.display = "flex";
         completeArea.style.flexDirection = "column";
         completeArea.style.gap = "8px";
@@ -587,8 +600,16 @@
       if (activeTaskPoll) clearInterval(activeTaskPoll);
       activeTaskPoll = null;
     } else if (task.status === "failed") {
+      if (barEl) {
+        barEl.style.width = "100%";
+        barEl.style.background = "#ef4444";
+      }
+      if (percentEl) {
+        percentEl.textContent = "Error";
+        percentEl.style.color = "#ef4444";
+      }
       if (speedEl) {
-        speedEl.innerHTML = `<span style="color: #f87171;">❌ Download error: ${task.error_message || "Failed"}</span>`;
+        speedEl.innerHTML = `<span style="color: #f87171; font-size: 11px; word-break: break-word;">❌ ${task.error_message || "Download failed"}</span>`;
       }
       if (activeTaskPoll) clearInterval(activeTaskPoll);
       activeTaskPoll = null;
@@ -605,8 +626,7 @@
     const payload = {
       url: url,
       format_id: formatId,
-      connections: 32,
-      cookies: document.cookie || ""
+      connections: 32
     };
 
     sendDownloadRequest(payload, (res) => {
@@ -630,61 +650,39 @@
   }
 
   function sendDownloadRequest(payload, callback) {
-    let handled = false;
-
-    // Method A: Chrome Runtime messaging
     if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
       try {
         chrome.runtime.sendMessage(
           { action: "SEND_TO_SIDM", payload: payload },
           (res) => {
-            if (chrome.runtime.lastError || !res) {
-              console.warn("SIDM: Runtime message fallback to direct fetch...", chrome.runtime.lastError);
-              if (!handled) {
-                handled = true;
-                directBridgeSend(payload, callback);
+            if (chrome.runtime.lastError) {
+              const errMsg = chrome.runtime.lastError.message || "";
+              if (errMsg.includes("Extension context invalidated")) {
+                showToast("warning", "🔄 SIDM extension was reloaded. Please refresh (F5) this tab!");
+              } else {
+                showToast("error", `⚠️ ${errMsg}`);
               }
+              callback({ success: false, error: errMsg });
               return;
             }
-            if (!handled) {
-              handled = true;
-              callback(res);
-            }
+            callback(res || { success: false, error: "Empty response from SIDM background" });
           }
         );
         return;
       } catch (err) {
-        console.warn("SIDM: Extension context invalidated, switching to direct fetch...", err);
+        const errMsg = err.message || "";
+        if (errMsg.includes("Extension context invalidated")) {
+          showToast("warning", "🔄 SIDM extension was reloaded. Please refresh (F5) this tab!");
+        } else {
+          showToast("error", `⚠️ ${errMsg}`);
+        }
+        callback({ success: false, error: errMsg });
+        return;
       }
     }
 
-    // Method B: Direct HTTP Fetch fallback (works even if extension reloaded without page refresh)
-    if (!handled) {
-      handled = true;
-      directBridgeSend(payload, callback);
-    }
-  }
-
-  function directBridgeSend(payload, callback) {
-    fetch(`${SIDM_BRIDGE_HTTP}/api/downloads`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          callback({ success: false, error: data.error || `Server HTTP ${res.status}` });
-        } else {
-          callback({ success: true, data: { success: true, task: data.task || data } });
-        }
-      })
-      .catch((err) => {
-        callback({
-          success: false,
-          error: "SIDM Engine is offline! Make sure './start_sidm.sh' is running in your terminal."
-        });
-      });
+    showToast("error", "⚠️ SIDM Extension is not active. Please refresh (F5) this page.");
+    callback({ success: false, error: "Extension not active" });
   }
 
   function showToast(type, text) {
@@ -700,6 +698,266 @@
     setTimeout(() => {
       toast.className = "sidm-toast";
     }, 4500);
+  }
+
+  // ==========================================
+  // Audio Completion Chime (IDM-Style Dual Sine Tone)
+  // ==========================================
+  function playCompletionChime() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(587.33, now);
+      gain1.gain.setValueAtTime(0.12, now);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.2);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(880, now + 0.12);
+      gain2.gain.setValueAtTime(0.16, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.5);
+    } catch (e) {}
+  }
+
+  // ==========================================
+  // Smart Clipboard Monitor
+  // ==========================================
+  let activePillTimeout = null;
+  function setupClipboardWatcher() {
+    document.addEventListener("copy", () => {
+      setTimeout(async () => {
+        try {
+          const text = await navigator.clipboard.readText().catch(() => null);
+          if (!text) return;
+          const trimmed = text.trim();
+          if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return;
+
+          const isMedia = /(youtube\.com|youtu\.be|facebook\.com|fb\.watch|tiktok\.com|instagram\.com|vimeo\.com|twitter\.com|x\.com)/i.test(trimmed);
+          const isFile = /\.(mp4|mkv|webm|avi|mov|mp3|m4a|flac|wav|zip|rar|7z|tar|gz|iso|exe|msi|deb|apk|pdf|docx|xlsx)($|\?)/i.test(trimmed);
+
+          if (isMedia || isFile) {
+            showClipboardPill(trimmed);
+          }
+        } catch (e) {}
+      }, 150);
+    });
+  }
+
+  function showClipboardPill(url) {
+    const existing = document.getElementById("sidmClipboardPill");
+    if (existing) existing.remove();
+    if (activePillTimeout) clearTimeout(activePillTimeout);
+
+    let displayUrl = url;
+    try {
+      const u = new URL(url);
+      displayUrl = u.hostname + (u.pathname.length > 25 ? u.pathname.slice(0, 25) + "..." : u.pathname);
+    } catch (e) {}
+
+    const pill = document.createElement("div");
+    pill.id = "sidmClipboardPill";
+    pill.className = "sidm-clipboard-pill";
+    pill.innerHTML = `
+      <div class="sidm-pill-icon">⚡</div>
+      <div class="sidm-pill-body">
+        <span class="sidm-pill-title">Download with SIDM?</span>
+        <span class="sidm-pill-url" title="${url}">${displayUrl}</span>
+      </div>
+      <button class="sidm-pill-btn-dl" id="sidmPillDl">⬇️ Download</button>
+      <button class="sidm-pill-btn-close" id="sidmPillClose">✕</button>
+    `;
+
+    document.body.appendChild(pill);
+
+    pill.querySelector("#sidmPillDl").addEventListener("click", () => {
+      startDownload(url, "best_1080p");
+      pill.remove();
+    });
+
+    pill.querySelector("#sidmPillClose").addEventListener("click", () => {
+      pill.remove();
+    });
+
+    activePillTimeout = setTimeout(() => {
+      if (pill && pill.parentNode) pill.remove();
+    }, 7000);
+  }
+
+  // ==========================================
+  // Playlist Batch Downloader Modal
+  // ==========================================
+  function openPlaylistModal(url) {
+    const existing = document.getElementById("sidmPlaylistModalBackdrop");
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "sidmPlaylistModalBackdrop";
+    backdrop.className = "sidm-modal-backdrop";
+    backdrop.innerHTML = `
+      <div class="sidm-playlist-modal">
+        <div class="sidm-modal-header">
+          <div class="sidm-modal-title">
+            <span>📑</span>
+            <span>SIDM Batch Playlist Downloader</span>
+          </div>
+          <button id="sidmClosePlaylistModal" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">&times;</button>
+        </div>
+        <div class="sidm-modal-body" id="sidmPlaylistModalBody">
+          <div style="text-align: center; padding: 40px 20px; color: #94a3b8;">
+            <div style="font-size: 28px; margin-bottom: 8px;">⏳</div>
+            <div style="font-weight: 600; color: #f8fafc;">Scanning playlist with SIDM Engine...</div>
+            <div style="font-size: 11px; margin-top: 4px;">Fetching video titles, durations, and formats</div>
+          </div>
+        </div>
+        <div class="sidm-modal-footer" id="sidmPlaylistModalFooter" style="display: none;">
+          <button id="sidmCancelPlaylistBtn" style="background: rgba(255,255,255,0.08); border:none; color:#f8fafc; padding: 8px 16px; border-radius: 8px; font-size: 12px; cursor:pointer;">Cancel</button>
+          <button id="sidmStartBatchBtn" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); border:none; color:#fff; font-weight:700; padding: 8px 20px; border-radius: 8px; font-size: 12px; cursor:pointer; box-shadow: 0 4px 15px rgba(37,99,235,0.4);">
+            🚀 Download Selected (<span id="sidmSelectedCount">0</span> Videos)
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    backdrop.querySelector("#sidmClosePlaylistModal").onclick = () => backdrop.remove();
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) backdrop.remove();
+    };
+
+    chrome.runtime.sendMessage(
+      { action: "INSPECT_PLAYLIST", url: url },
+      (resData) => {
+        if (!resData || !resData.success || !resData.data) {
+          document.getElementById("sidmPlaylistModalBody").innerHTML = `
+            <div style="text-align:center; padding: 30px; color: #f87171;">
+              <div style="font-size: 24px; margin-bottom: 8px;">❌</div>
+              <div style="font-weight:700;">Could not parse playlist</div>
+              <div style="font-size:11px; margin-top:4px;">${(resData && resData.error) || "Please check your connection and try again."}</div>
+            </div>
+          `;
+          return;
+        }
+
+        const data = resData.data;
+        const items = data.items || [];
+
+        let rowsHtml = items.map((it, idx) => `
+          <div class="sidm-playlist-row">
+            <input type="checkbox" class="sidm-batch-item-cb" data-idx="${idx}" checked style="accent-color: #2563eb; width: 16px; height: 16px; cursor: pointer;">
+            <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;">
+              ${idx + 1}. ${it.title}
+            </div>
+            <div style="font-size: 11px; color: #94a3b8; font-family: monospace;">
+              ${it.duration_seconds ? Math.floor(it.duration_seconds / 60) + ":" + String(it.duration_seconds % 60).padStart(2, '0') : ""}
+            </div>
+          </div>
+        `).join("");
+
+        document.getElementById("sidmPlaylistModalBody").innerHTML = `
+          <div class="sidm-playlist-toolbar">
+            <div>
+              <div style="font-weight: 700; color: #38bdf8; font-size: 14px;">${data.title}</div>
+              <div style="font-size: 11px; color: #94a3b8;">${items.length} videos detected</div>
+            </div>
+            <div style="display:flex; align-items:center; gap: 8px;">
+              <label style="font-size: 11px; color: #94a3b8;">Format:</label>
+              <select id="sidmBatchFormatSelect" style="background:#1e293b; color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:6px; padding: 4px 8px; font-size: 11px; outline:none;">
+                <option value="best_1080p">🎬 1080p Full HD (MP4)</option>
+                <option value="best_720p">⚡ 720p HD (MP4)</option>
+                <option value="best_8k">🌟 8K / 4K UHD</option>
+                <option value="best_audio">🎵 320kbps MP3 (Audio)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 11px; color: #94a3b8;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" id="sidmSelectAllCb" checked style="accent-color: #2563eb;"> Select All (${items.length})
+            </label>
+          </div>
+          <div class="sidm-playlist-items" style="max-height: 45vh; overflow-y: auto;">
+            ${rowsHtml}
+          </div>
+        `;
+
+        const footer = document.getElementById("sidmPlaylistModalFooter");
+        if (footer) footer.style.display = "flex";
+
+        const updateCount = () => {
+          const selected = document.querySelectorAll(".sidm-batch-item-cb:checked").length;
+          const countEl = document.getElementById("sidmSelectedCount");
+          if (countEl) countEl.textContent = selected;
+        };
+        updateCount();
+
+        const selectAllCb = document.getElementById("sidmSelectAllCb");
+        if (selectAllCb) {
+          selectAllCb.onchange = () => {
+            document.querySelectorAll(".sidm-batch-item-cb").forEach((cb) => (cb.checked = selectAllCb.checked));
+            updateCount();
+          };
+        }
+
+        document.querySelectorAll(".sidm-batch-item-cb").forEach((cb) => {
+          cb.onchange = updateCount;
+        });
+
+        document.getElementById("sidmCancelPlaylistBtn").onclick = () => backdrop.remove();
+
+        document.getElementById("sidmStartBatchBtn").onclick = async () => {
+          const formatId = document.getElementById("sidmBatchFormatSelect").value;
+          const selectedCbs = Array.from(document.querySelectorAll(".sidm-batch-item-cb:checked"));
+          if (selectedCbs.length === 0) {
+            alert("Please select at least 1 video to download.");
+            return;
+          }
+
+          const batchPayloads = selectedCbs.map((cb) => {
+            const idx = parseInt(cb.getAttribute("data-idx"), 10);
+            const it = items[idx];
+            return {
+              url: it.url,
+              format_id: formatId,
+              file_name: it.title,
+              connections: 16
+            };
+          });
+
+          const btn = document.getElementById("sidmStartBatchBtn");
+          btn.textContent = "⏳ Queueing tasks...";
+          btn.disabled = true;
+
+          chrome.runtime.sendMessage(
+            { action: "BATCH_DOWNLOAD", payload: { items: batchPayloads } },
+            (data) => {
+              if (data && data.success) {
+                backdrop.remove();
+                showToast("success", `⚡ Queued ${data.count} videos in SIDM!`);
+                if (data.tasks && data.tasks.length > 0) {
+                  currentActiveTaskId = data.tasks[0].id;
+                  showLiveDownloadCard(currentActiveTaskId, data.tasks[0].url);
+                }
+              } else {
+                alert("Batch download failed: " + ((data && data.error) || "Unknown error"));
+                btn.disabled = false;
+              }
+            }
+          );
+        };
+      }
+    );
   }
 
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {

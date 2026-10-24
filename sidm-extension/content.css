@@ -208,21 +208,28 @@
    ========================================================== */
 #sidm-download-card {
   position: fixed !important;
-  bottom: 28px !important;
-  right: 28px !important;
-  width: 380px !important;
-  max-width: calc(100vw - 40px) !important;
+  bottom: 24px;
+  right: 24px;
+  width: 360px !important;
+  max-width: min(360px, calc(100vw - 32px)) !important;
+  height: auto !important;
+  max-height: 80vh !important;
   z-index: 2147483647 !important;
   background: rgba(15, 23, 42, 0.98) !important;
   backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(56, 189, 248, 0.5) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 25px rgba(56, 189, 248, 0.25) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), 0 0 20px rgba(56, 189, 248, 0.25) !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
   user-select: none !important;
   display: none;
-  animation: sidmCardIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  animation: sidmCardIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+#sidm-download-card * {
+  box-sizing: border-box !important;
 }
 
 #sidm-download-card.sidm-card-show {
@@ -441,4 +448,199 @@
   font-size: 11px !important;
   color: #94a3b8 !important;
   font-weight: 500 !important;
+}
+
+/* Playlist Badge Button */
+.sidm-btn-playlist {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 7px 11px !important;
+  background: rgba(147, 51, 234, 0.4) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.15) !important;
+  cursor: pointer !important;
+  color: #e9d5ff !important;
+  transition: background 0.15s ease !important;
+}
+
+.sidm-btn-playlist:hover {
+  background: #9333ea !important;
+  color: #ffffff !important;
+}
+
+/* Smart Clipboard Pill */
+.sidm-clipboard-pill {
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.98) 100%) !important;
+  border: 1px solid rgba(56, 189, 248, 0.5) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 16px 35px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  padding: 10px 16px !important;
+  color: #f8fafc !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  backdrop-filter: blur(12px) !important;
+  animation: sidmPillSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  max-width: 440px !important;
+}
+
+@keyframes sidmPillSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sidm-pill-icon {
+  font-size: 20px !important;
+  filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.8)) !important;
+}
+
+.sidm-pill-body {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  overflow: hidden !important;
+}
+
+.sidm-pill-title {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+}
+
+.sidm-pill-url {
+  font-size: 11px !important;
+  color: #94a3b8 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 200px !important;
+}
+
+.sidm-pill-btn-dl {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 6px 12px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: opacity 0.15s ease !important;
+}
+
+.sidm-pill-btn-dl:hover {
+  opacity: 0.9 !important;
+}
+
+.sidm-pill-btn-close {
+  background: transparent !important;
+  border: none !important;
+  color: #64748b !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  line-height: 1 !important;
+}
+
+.sidm-pill-btn-close:hover {
+  color: #ffffff !important;
+}
+
+/* Playlist Batch Modal */
+.sidm-modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  animation: sidmFadeIn 0.2s ease !important;
+}
+
+.sidm-playlist-modal {
+  width: 90% !important;
+  max-width: 640px !important;
+  max-height: 85vh !important;
+  background: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  color: #f8fafc !important;
+}
+
+.sidm-modal-header {
+  padding: 18px 24px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: rgba(30, 41, 59, 0.4) !important;
+}
+
+.sidm-modal-title {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.sidm-modal-body {
+  padding: 16px 24px !important;
+  overflow-y: auto !important;
+  flex: 1 !important;
+}
+
+.sidm-playlist-toolbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 14px !important;
+  gap: 12px !important;
+  font-size: 13px !important;
+}
+
+.sidm-playlist-items {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.sidm-playlist-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 10px 14px !important;
+  background: rgba(30, 41, 59, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+}
+
+.sidm-modal-footer {
+  padding: 16px 24px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  background: rgba(30, 41, 59, 0.4) !important;
 }

@@ -61,11 +61,12 @@ impl TaskManager {
             .clone()
             .unwrap_or_else(|| Classifier::extract_filename(&req.url));
 
+        let category = Classifier::get_category_subfolder(&file_name, &download_type, req.format_id.as_deref());
         let save_dir = req
             .save_dir
             .as_ref()
             .map(PathBuf::from)
-            .unwrap_or_else(|| self.config.default_download_dir.clone());
+            .unwrap_or_else(|| self.config.default_download_dir.join(category));
 
         let _ = std::fs::create_dir_all(&save_dir);
         let save_path = save_dir.join(&file_name).to_string_lossy().to_string();
@@ -202,14 +203,23 @@ impl TaskManager {
                 )
                 .await
                 {
-                    Ok(_) => {
-                        println!("✅ [SIDM] Media Download Completed! Saved to folder: {}", save_path);
+                    Ok(final_path) => {
+                        let actual_path = if !final_path.is_empty() { final_path } else { save_path.clone() };
+                        let actual_name = std::path::Path::new(&actual_path)
+                            .file_name()
+                            .map(|f| f.to_string_lossy().to_string())
+                            .unwrap_or(task.file_name.clone());
+
+                        println!("✅ [SIDM] Media Download Completed! File: {}", actual_path);
                         let mut map = tasks.write().await;
                         if let Some(t) = map.get_mut(&id) {
                             t.status = DownloadStatus::Completed;
                             t.progress_percent = 100.0;
+                            t.save_path = actual_path.clone();
+                            t.file_name = actual_name.clone();
                         }
-                        let _ = event_tx.send(DownloadEvent::TaskCompleted { id, save_path });
+                        trigger_desktop_notification(&actual_name, &actual_path);
+                        let _ = event_tx.send(DownloadEvent::TaskCompleted { id, save_path: actual_path });
                     }
                     Err(e) => {
                         eprintln!("❌ [SIDM] Media Download Error: {}", e);
@@ -312,6 +322,7 @@ impl TaskManager {
                             t.progress_percent = 100.0;
                             t.speed_bps = 0;
                         }
+                        trigger_desktop_notification(&task.file_name, &save_path);
                         let _ = event_tx.send(DownloadEvent::TaskCompleted { id, save_path });
                     }
                     Err(e) => {
@@ -394,19 +405,50 @@ impl TaskManager {
     pub async fn open_task_folder(&self, id: Uuid) -> Result<()> {
         let task = self.get_task(id).await.ok_or_else(|| anyhow!("Task not found"))?;
         let p = std::path::PathBuf::from(&task.save_path);
-        let folder = if p.is_dir() {
-            p
-        } else if let Some(parent) = p.parent() {
-            if parent.exists() {
-                parent.to_path_buf()
+
+        #[cfg(target_os = "windows")]
+        {
+            if p.exists() {
+                // Windows Explorer /select,"C:\path\to\file.mp4" opens the folder AND highlights the file!
+                let res = std::process::Command::new("explorer")
+                    .arg(format!("/select,{}", p.display()))
+                    .spawn();
+                if res.is_ok() {
+                    return Ok(());
+                }
+            }
+            let folder = if p.is_dir() {
+                p
+            } else if let Some(parent) = p.parent() {
+                if parent.exists() {
+                    parent.to_path_buf()
+                } else {
+                    self.config.default_download_dir.clone()
+                }
             } else {
                 self.config.default_download_dir.clone()
-            }
-        } else {
-            self.config.default_download_dir.clone()
-        };
+            };
+            std::process::Command::new("explorer")
+                .arg(folder.display().to_string())
+                .spawn()?;
+            return Ok(());
+        }
 
-        Self::launch_system_open(&folder)
+        #[cfg(not(target_os = "windows"))]
+        {
+            let folder = if p.is_dir() {
+                p
+            } else if let Some(parent) = p.parent() {
+                if parent.exists() {
+                    parent.to_path_buf()
+                } else {
+                    self.config.default_download_dir.clone()
+                }
+            } else {
+                self.config.default_download_dir.clone()
+            };
+            Self::launch_system_open(&folder)
+        }
     }
 
     pub async fn open_task_file(&self, id: Uuid) -> Result<()> {
@@ -416,14 +458,15 @@ impl TaskManager {
         let target = if p.exists() {
             p
         } else if let Some(parent) = p.parent() {
-            // Check for downloaded video in target directory
+            // Check for downloaded video in target directory (including .mp4, .mkv, or stem matches)
             let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             if let Ok(entries) = std::fs::read_dir(parent) {
                 let mut candidates: Vec<_> = entries
                     .filter_map(|e| e.ok())
                     .filter(|e| {
                         let name = e.file_name().to_string_lossy().to_string();
-                        (!stem.is_empty() && name.contains(stem)) || (!name.ends_with(".part") && !name.ends_with(".ytdl"))
+                        (!stem.is_empty() && name.contains(stem))
+                            || (!name.ends_with(".part") && !name.ends_with(".ytdl"))
                     })
                     .collect();
                 candidates.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
@@ -439,11 +482,121 @@ impl TaskManager {
             self.config.default_download_dir.clone()
         };
 
-        Self::launch_system_open(&target)
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: "cmd /C start \"\" \"<target>\"" launches default media player (VLC, Windows Media Player, etc.)
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "", &target.to_string_lossy()])
+                .spawn()?;
+            return Ok(());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Self::launch_system_open(&target)
+        }
     }
 
     pub fn open_default_folder(&self) -> Result<()> {
-        Self::launch_system_open(&self.config.default_download_dir)
+        let dir = &self.config.default_download_dir;
+        let _ = std::fs::create_dir_all(dir);
+
+        #[cfg(target_os = "windows")]
+        {
+            std::process::Command::new("explorer")
+                .arg(dir.display().to_string())
+                .spawn()?;
+            return Ok(());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Self::launch_system_open(dir)
+        }
+    }
+
+    pub fn get_extension_dir() -> PathBuf {
+        let candidates = [
+            "extension",
+            "sidm-extension",
+            "../sidm-extension",
+            "../../sidm-extension",
+        ];
+        for c in &candidates {
+            let p = PathBuf::from(c);
+            if p.join("manifest.json").exists() {
+                if let Ok(canon) = std::fs::canonicalize(&p) {
+                    return canon;
+                }
+                return p;
+            }
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                for sub in &["extension", "sidm-extension", "../extension", "../sidm-extension"] {
+                    let p = parent.join(sub);
+                    if p.join("manifest.json").exists() {
+                        if let Ok(canon) = std::fs::canonicalize(&p) {
+                            return canon;
+                        }
+                        return p;
+                    }
+                }
+            }
+        }
+        PathBuf::from("extension")
+    }
+
+    pub async fn launch_browser_extension(&self) -> Result<()> {
+        let ext_dir = Self::get_extension_dir();
+
+        #[cfg(target_os = "windows")]
+        {
+            let ext_arg = format!("--load-extension={}", ext_dir.display());
+            let chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            ];
+            let mut launched = false;
+            for p in &chrome_paths {
+                if std::path::Path::new(p).exists() {
+                    let _ = std::process::Command::new(p)
+                        .arg(&ext_arg)
+                        .arg("http://127.0.0.1:45678")
+                        .spawn();
+                    launched = true;
+                    break;
+                }
+            }
+
+            if !launched {
+                let _ = std::process::Command::new("cmd")
+                    .args(["/C", "start", "chrome", &ext_arg])
+                    .spawn();
+            }
+
+            return Ok(());
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let ext_arg = format!("--load-extension={}", ext_dir.display());
+            if std::process::Command::new("google-chrome")
+                .arg(&ext_arg)
+                .arg("http://127.0.0.1:45678")
+                .spawn().is_ok() {
+                return Ok(());
+            }
+            if std::process::Command::new("chromium")
+                .arg(&ext_arg)
+                .arg("http://127.0.0.1:45678")
+                .spawn().is_ok() {
+                return Ok(());
+            }
+            Ok(())
+        }
     }
 
     fn launch_system_open(path: &std::path::Path) -> Result<()> {
@@ -456,7 +609,7 @@ impl TaskManager {
         #[cfg(target_os = "windows")]
         {
             std::process::Command::new("explorer")
-                .arg(path)
+                .arg(path.display().to_string())
                 .spawn()?;
         }
         #[cfg(target_os = "macos")]
@@ -467,4 +620,48 @@ impl TaskManager {
         }
         Ok(())
     }
+}
+
+fn trigger_desktop_notification(filename: &str, save_path: &str) {
+    let fname = filename.to_string();
+    let spath = save_path.to_string();
+    tokio::spawn(async move {
+        if cfg!(target_os = "windows") {
+            let script = format!(
+                r#"
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+$template = @"
+<toast>
+    <visual>
+        <binding template="ToastGeneric">
+            <text>⚡ SIDM: Download Completed!</text>
+            <text>{}</text>
+        </binding>
+    </visual>
+</toast>
+"@
+$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+$xml.LoadXml($template)
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("SIDM").Show($toast)
+"#,
+                fname.replace('"', "")
+            );
+            let _ = tokio::process::Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-Command")
+                .arg(script)
+                .spawn();
+        } else if cfg!(target_os = "linux") {
+            let body = format!("Saved to: {}", spath);
+            let _ = tokio::process::Command::new("notify-send")
+                .arg("⚡ SIDM: Download Completed!")
+                .arg(format!("{}\n{}", fname, body))
+                .arg("-i")
+                .arg("video-x-generic")
+                .spawn();
+        }
+    });
 }

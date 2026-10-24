@@ -64,4 +64,41 @@ impl Classifier {
         }
         format!("sidm_download_{}", chrono::Utc::now().timestamp())
     }
+
+    /// Automatically determine the organized destination folder (Videos, Music, Compressed, Programs, Documents)
+    pub fn get_category_subfolder(
+        filename: &str,
+        download_type: &DownloadType,
+        format_id: Option<&str>,
+    ) -> &'static str {
+        if format_id == Some("best_audio") {
+            return "Music";
+        }
+
+        let lower = filename.to_lowercase();
+        let ext = lower.rsplit('.').next().unwrap_or("");
+
+        match ext {
+            // Videos
+            "mp4" | "mkv" | "webm" | "avi" | "mov" | "wmv" | "flv" | "m4v" | "ts" | "3gp" => "Videos",
+            // Music / Audio
+            "mp3" | "m4a" | "wav" | "flac" | "aac" | "ogg" | "wma" | "opus" | "alac" | "aiff" => "Music",
+            // Compressed Archives
+            "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" | "iso" | "dmg" | "tgz" => "Compressed",
+            // Programs / Installers
+            "exe" | "msi" | "deb" | "rpm" | "apk" | "appimage" => "Programs",
+            // Documents
+            "pdf" | "docx" | "doc" | "xlsx" | "xls" | "pptx" | "ppt" | "txt" | "rtf" | "odt" | "csv" | "epub" => "Documents",
+            // Images
+            "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg" | "ico" | "tiff" => "Images",
+            // Fallback based on stream type
+            _ => {
+                if *download_type == DownloadType::MediaStream || *download_type == DownloadType::HlsDash {
+                    "Videos"
+                } else {
+                    "General"
+                }
+            }
+        }
+    }
 }

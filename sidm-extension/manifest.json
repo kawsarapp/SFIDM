@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "SIDM Integration Module",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA80ct047SeepPCMrN/d7exK1518juyJ8/ufyqHwgX562A1WiKl9Ba4w+0/2GHU8tQ6JVxdqbLJnjKJQI9T+CIdML2h/elJK26mA+PBy/9qO+2rTxfmmKYqetfL3CazZwvUWb+bxMHHu9Xannd8Ewq3W83BSnSNy6DVXRdxzfdAMOsDXmV9V9CV7xkp26dbLzh4ozW8yTutPw4IvPHWA3cDoZYbng2EGnsmokoqZfgLoYzdoyZ7vI4sAVilq/8xBRLiyL21SpgHv4NzBRqOog86EmhOEQqgCFvbavgiRNWrEBQeEQu+rCldi1t+hK8MbpAr2DBRqKakvxgkQF8qR14OQIDAQAB",
   "description": "Next-Gen High-Speed Download Manager Integration for SIDM",
   "permissions": [
     "activeTab",
     "storage",
-    "contextMenus"
+    "contextMenus",
+    "cookies",
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>",

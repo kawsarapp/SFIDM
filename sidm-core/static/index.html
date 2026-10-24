@@ -47,6 +47,11 @@
 
     <!-- Overall Speed Display & License -->
     <div class="flex items-center gap-4">
+      <button id="extSetupBtn" class="flex items-center gap-1.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 px-3 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer" title="Setup Browser Extension">
+        <span>🔌</span>
+        <span>Browser Extension</span>
+      </button>
+
       <button id="licenseBadgeBtn" class="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-amber-400/20 hover:from-amber-500/20 hover:to-amber-400/30 border border-amber-500/30 text-amber-300 px-3 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer">
         <span id="licenseIcon">⭐</span>
         <span id="licenseText">Checking License...</span>
@@ -237,6 +242,48 @@
     </div>
   </div>
 
+  <!-- Browser Extension Setup Modal -->
+  <div id="extModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+      <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+          <span>🔌</span> Browser Extension Setup (Chrome, Edge, Brave)
+        </h3>
+        <button id="closeExtModalBtn" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+      </div>
+
+      <div class="flex flex-col gap-3 text-xs">
+        <div class="p-3 bg-gradient-to-r from-blue-950/60 to-slate-900 rounded-xl border border-blue-800/40 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-blue-300">Method 1: One-Click Auto-Launch</span>
+            <span class="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded font-bold">Fastest</span>
+          </div>
+          <p class="text-slate-400 text-[11px]">Launches Chrome or Edge with SIDM extension automatically preloaded.</p>
+          <button id="launchBrowserExtBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/30">
+            <span>🚀</span> Launch Browser with Extension Preloaded
+          </button>
+        </div>
+
+        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 flex flex-col gap-2">
+          <span class="font-semibold text-slate-300">Method 2: Manual 3-Second Setup</span>
+          <div class="flex items-center justify-between bg-slate-900 p-2 rounded-lg border border-slate-800">
+            <span id="extPathDisplay" class="font-mono text-[11px] text-sky-400 truncate max-w-xs select-all">Loading path...</span>
+            <button id="copyExtPathBtn" class="bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded text-slate-300 text-[11px] font-semibold">Copy Path</button>
+          </div>
+          <ol class="list-decimal list-inside space-y-1 text-slate-400 text-[11px] mt-1">
+            <li>Open <code class="text-sky-300 font-mono">chrome://extensions</code> or <code class="text-sky-300 font-mono">edge://extensions</code></li>
+            <li>Turn on <strong class="text-slate-200">Developer mode</strong> (top-right toggle switch)</li>
+            <li>Click <strong class="text-slate-200">Load unpacked</strong> and paste the copied path!</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="flex justify-end border-t border-slate-800 pt-3">
+        <button id="doneExtModalBtn" class="px-5 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API = "http://127.0.0.1:45678";
     let tasks = [];
@@ -253,6 +300,58 @@
     const licenseEmailInput = document.getElementById("licenseEmailInput");
     const activateBtn = document.getElementById("activateBtn");
     const licenseResultMsg = document.getElementById("licenseResultMsg");
+
+    // Extension Setup Modal Handling
+    const extModal = document.getElementById("extModal");
+    const extSetupBtn = document.getElementById("extSetupBtn");
+    const closeExtModalBtn = document.getElementById("closeExtModalBtn");
+    const doneExtModalBtn = document.getElementById("doneExtModalBtn");
+    const extPathDisplay = document.getElementById("extPathDisplay");
+    const copyExtPathBtn = document.getElementById("copyExtPathBtn");
+    const launchBrowserExtBtn = document.getElementById("launchBrowserExtBtn");
+
+    async function loadExtInfo() {
+      try {
+        const res = await fetch(`${API}/api/extension-info`);
+        const data = await res.json();
+        if (data.success) {
+          extPathDisplay.textContent = data.path;
+        }
+      } catch (e) {}
+    }
+    loadExtInfo();
+
+    extSetupBtn.onclick = () => {
+      extModal.classList.remove("hidden");
+      loadExtInfo();
+    };
+    closeExtModalBtn.onclick = doneExtModalBtn.onclick = () => {
+      extModal.classList.add("hidden");
+    };
+
+    copyExtPathBtn.onclick = () => {
+      navigator.clipboard.writeText(extPathDisplay.textContent);
+      copyExtPathBtn.textContent = "Copied!";
+      setTimeout(() => copyExtPathBtn.textContent = "Copy Path", 2000);
+    };
+
+    launchBrowserExtBtn.onclick = async () => {
+      launchBrowserExtBtn.innerHTML = "<span>⏳</span> Launching Browser...";
+      try {
+        const res = await fetch(`${API}/api/launch-browser-extension`, { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+          launchBrowserExtBtn.innerHTML = "<span>✅</span> Browser Launched with Extension!";
+        } else {
+          launchBrowserExtBtn.innerHTML = "<span>❌</span> Could not auto-launch. Please use Method 2.";
+        }
+      } catch (e) {
+        launchBrowserExtBtn.innerHTML = "<span>❌</span> Error contacting server";
+      }
+      setTimeout(() => {
+        launchBrowserExtBtn.innerHTML = "<span>🚀</span> Launch Browser with Extension Preloaded";
+      }, 3500);
+    };
 
     licenseBadgeBtn.onclick = () => { licenseModal.classList.remove("hidden"); };
     closeLicenseModalBtn.onclick = cancelLicenseBtn.onclick = () => { licenseModal.classList.add("hidden"); };
@@ -580,13 +679,44 @@
       };
     });
 
+    function playCompletionChime() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = ctx.currentTime;
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(587.33, now);
+        gain1.gain.setValueAtTime(0.12, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.2);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(880, now + 0.12);
+        gain2.gain.setValueAtTime(0.16, now + 0.12);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.12);
+        osc2.stop(now + 0.5);
+      } catch (e) {}
+    }
+
     // WebSocket real-time subscription
     function setupWebSocket() {
       const ws = new WebSocket("ws://127.0.0.1:45678/ws");
       ws.onmessage = (event) => {
         try {
           const ev = JSON.parse(event.data);
-          if (ev.event === "TaskProgress") {
+          if (ev.event === "TaskCompleted") {
+            playCompletionChime();
+            fetchTasks();
+          } else if (ev.event === "TaskProgress") {
             const task = tasks.find(t => t.id === ev.data.id);
             if (task) {
               task.downloaded_bytes = ev.data.downloaded_bytes;

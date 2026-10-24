@@ -1,4 +1,6 @@
-use crate::model::{ChunkInfo, MediaFormatOption, MediaInspectResult};
+use crate::model::{
+    ChunkInfo, MediaFormatOption, MediaInspectResult, PlaylistItem, PlaylistInspectResult,
+};
 use anyhow::{anyhow, Result};
 use std::path::Path;
 use std::process::Stdio;
@@ -53,7 +55,152 @@ fn get_ytdlp_bin() -> String {
     }
 }
 
+fn get_ffmpeg_location() -> Option<String> {
+    let candidates = [
+        "bin/ffmpeg.exe",
+        "bin/ffmpeg",
+        "sidm-core/bin/ffmpeg.exe",
+        "sidm-core/bin/ffmpeg",
+        "./bin/ffmpeg.exe",
+        "./bin/ffmpeg",
+        "ffmpeg.exe",
+        "ffmpeg",
+    ];
+    for c in &candidates {
+        let p = std::path::Path::new(c);
+        if p.exists() {
+            if let Ok(canon) = std::fs::canonicalize(p) {
+                if let Some(parent) = canon.parent() {
+                    return Some(parent.to_string_lossy().to_string());
+                }
+            }
+            return Some(c.to_string());
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            for sub in &[
+                "bin/ffmpeg.exe",
+                "bin/ffmpeg",
+                "ffmpeg.exe",
+                "ffmpeg",
+                "../bin/ffmpeg.exe",
+                "../bin/ffmpeg",
+            ] {
+                let p = parent.join(sub);
+                if p.exists() {
+                    if let Some(par) = p.parent() {
+                        return Some(par.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn apply_cookies(cmd: &mut Command, cookies: Option<&str>) {
+    if let Some(cookie_str) = cookies {
+        let clean = cookie_str.trim().replace('\r', "").replace('\n', "; ");
+        if clean.len() > 5 {
+            cmd.arg("--add-header").arg(format!("Cookie: {}", clean));
+        }
+    }
+}
+
 impl MediaEngine {
+    /// Fast playlist inspection (titles, IDs, thumbnails, durations) without downloading video payloads
+    pub async fn inspect_playlist(url: &str, cookies: Option<&str>) -> Result<PlaylistInspectResult> {
+        let bin = get_ytdlp_bin();
+        let mut cmd = Command::new(&bin);
+        cmd.arg("--flat-playlist")
+            .arg("-J")
+            .arg("--no-warnings")
+            .arg(url);
+
+        if let Some(ref ffmpeg_loc) = get_ffmpeg_location() {
+            cmd.arg("--ffmpeg-location").arg(ffmpeg_loc);
+        }
+
+        apply_cookies(&mut cmd, cookies);
+
+        let output = cmd.output().await.map_err(|e| {
+            anyhow!("Failed to run yt-dlp for playlist inspect ({}): {}", bin, e)
+        })?;
+
+        if !output.status.success() {
+            let err_msg = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Playlist inspection failed: {}", err_msg));
+        }
+
+        let json_val: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+        let playlist_title = json_val
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Media Playlist")
+            .to_string();
+
+        let mut items = Vec::new();
+
+        if let Some(entries) = json_val.get("entries").and_then(|v| v.as_array()) {
+            for entry in entries {
+                let id = entry.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                if id.is_empty() {
+                    continue;
+                }
+
+                let title = entry
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Untitled Video")
+                    .to_string();
+
+                let item_url = entry
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .map(|u| {
+                        if u.starts_with("http") {
+                            u.to_string()
+                        } else {
+                            format!("https://www.youtube.com/watch?v={}", id)
+                        }
+                    })
+                    .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={}", id));
+
+                let duration_seconds = entry.get("duration").and_then(|v| v.as_u64());
+
+                let thumbnail = entry
+                    .get("thumbnail")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| {
+                        entry
+                            .get("thumbnails")
+                            .and_then(|t| t.as_array())
+                            .and_then(|arr| arr.last())
+                            .and_then(|th| th.get("url"))
+                            .and_then(|u| u.as_str())
+                    })
+                    .map(|s| s.to_string());
+
+                items.push(PlaylistItem {
+                    id,
+                    title,
+                    url: item_url,
+                    duration_seconds,
+                    thumbnail,
+                });
+            }
+        }
+
+        let count = items.len();
+        Ok(PlaylistInspectResult {
+            title: playlist_title,
+            count,
+            items,
+        })
+    }
+
     /// Inspect media formats using bundled or system yt-dlp
     pub async fn inspect(url: &str, cookies: Option<&str>) -> Result<MediaInspectResult> {
         let bin = get_ytdlp_bin();
@@ -63,11 +210,11 @@ impl MediaEngine {
             .arg("--no-playlist")
             .arg(url);
 
-        if let Some(cookie_str) = cookies {
-            if cookie_str.len() > 10 && !cookie_str.contains('\n') {
-                cmd.arg("--add-header").arg(format!("Cookie: {}", cookie_str));
-            }
+        if let Some(ref ffmpeg_loc) = get_ffmpeg_location() {
+            cmd.arg("--ffmpeg-location").arg(ffmpeg_loc);
         }
+
+        apply_cookies(&mut cmd, cookies);
 
         let output = cmd.output().await.map_err(|e| {
             anyhow!(
@@ -234,58 +381,64 @@ impl MediaEngine {
         format_id: Option<&str>,
         cookies: Option<&str>,
         on_progress: F,
-    ) -> Result<()>
+    ) -> Result<String>
     where
         F: Fn(u64, Option<u64>, u64, f32, Option<u64>, Vec<ChunkInfo>) + Send + Sync + 'static,
     {
         let bin = get_ytdlp_bin();
         let mut cmd = Command::new(&bin);
 
-        // Format selector mapping (Optimized for Adobe Premiere Pro, DaVinci Resolve, & Final Cut)
-        // Prioritizes standard H.264 (AVC1) video and AAC (M4A) audio for zero-conversion NLE import
+        // Robust format selector (handles YouTube DASH, Facebook, TikTok, Instagram, and single stream MP4s)
         let format_arg = match format_id.unwrap_or("best_1080p") {
-            "best_8k" => "bestvideo+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
-            "best_1080p" => "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best",
-            "best_720p" => "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best",
-            "best_audio" => "bestaudio[ext=m4a]/bestaudio/best",
+            "best_8k" => "bestvideo+bestaudio/best",
+            "best_1080p" => "bestvideo[height<=?1080]+bestaudio/best[height<=?1080]/best",
+            "best_720p" => "bestvideo[height<=?720]+bestaudio/best[height<=?720]/best",
+            "best_audio" => "bestaudio/best",
             custom => custom,
         };
 
-        // Determine destination directory and filename template
+        // Determine destination directory
         let save_dir = save_path.parent().unwrap_or_else(|| Path::new("."));
         let _ = std::fs::create_dir_all(save_dir);
 
         // Output template: saves into target folder with video title
-        let output_template = format!("{}/%(title)s.%(ext)s", save_dir.to_string_lossy());
+        let output_template = format!("{}/%(title).150s.%(ext)s", save_dir.to_string_lossy());
 
-        cmd.arg("-f")
-            .arg(format_arg)
-            .arg("--merge-output-format")
-            .arg("mp4")
-            .arg("--postprocessor-args")
-            .arg("MergerName:-c:v copy -c:a aac -b:a 192k") // Ensures Premiere Pro 100% native audio decoding
-            .arg("-N")
+        cmd.arg("-N")
             .arg("16") // 16 parallel fragment streams for speed
             .arg("--buffer-size")
             .arg("16M")
             .arg("--no-playlist")
             .arg("--newline")
             .arg("--progress")
+            .arg("--windows-filenames")
+            .arg("--no-abort-on-error")
             .arg("--user-agent")
-            .arg("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+            .arg("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+            .arg("--print")
+            .arg("after_move:filepath")
             .arg("-o")
-            .arg(&output_template)
-            .arg(url);
+            .arg(&output_template);
+
+        if let Some(ref ffmpeg_loc) = get_ffmpeg_location() {
+            cmd.arg("--ffmpeg-location").arg(ffmpeg_loc);
+        }
+
+        apply_cookies(&mut cmd, cookies);
 
         if format_id == Some("best_audio") {
-            cmd.arg("-x").arg("--audio-format").arg("mp3");
+            // Studio-Quality 320kbps MP3
+            cmd.arg("-x")
+                .arg("--audio-format").arg("mp3")
+                .arg("--audio-quality").arg("0");
+        } else {
+            // Video: Merge into MP4 container without triggering YouTube 429 subtitle blocks
+            cmd.arg("-f").arg(format_arg)
+                .arg("--merge-output-format").arg("mp4")
+                .arg("--no-write-subs");
         }
 
-        if let Some(cookie_str) = cookies {
-            if cookie_str.len() > 10 && !cookie_str.contains('\n') {
-                cmd.arg("--add-header").arg(format!("Cookie: {}", cookie_str));
-            }
-        }
+        cmd.arg(url);
 
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -294,9 +447,34 @@ impl MediaEngine {
         })?;
 
         let stdout = child.stdout.take().ok_or_else(|| anyhow!("No stdout"))?;
+        let stderr = child.stderr.take().ok_or_else(|| anyhow!("No stderr"))?;
+
+        // Drain stderr asynchronously so it doesn't block OS pipes
+        let err_task = tokio::spawn(async move {
+            let mut err_reader = BufReader::new(stderr).lines();
+            let mut lines = Vec::new();
+            while let Ok(Some(l)) = err_reader.next_line().await {
+                if l.contains("ERROR:") || l.contains("WARNING:") {
+                    eprintln!("yt-dlp: {}", l);
+                }
+                lines.push(l);
+            }
+            lines
+        });
+
         let mut reader = BufReader::new(stdout).lines();
+        let mut final_filepath = String::new();
 
         while let Ok(Some(line)) = reader.next_line().await {
+            let trimmed = line.trim();
+
+            // Detect final output filepath printed by yt-dlp
+            if (trimmed.starts_with('/') || (trimmed.len() > 3 && &trimmed[1..3] == ":\\"))
+                && (trimmed.ends_with(".mp4") || trimmed.ends_with(".mp3") || trimmed.ends_with(".mkv") || trimmed.ends_with(".webm"))
+            {
+                final_filepath = trimmed.to_string();
+            }
+
             // Parse yt-dlp progress: "[download]  45.2% of ~120.50MiB at 12.35MiB/s ETA 00:05"
             if line.contains("[download]") && line.contains('%') {
                 let parts: Vec<&str> = line.split_whitespace().collect();
@@ -368,11 +546,24 @@ impl MediaEngine {
         }
 
         let status = child.wait().await?;
+        let err_lines = err_task.await.unwrap_or_default();
+
         if !status.success() {
-            return Err(anyhow!("Media download process failed with exit code: {}", status));
+            let error_msg = err_lines
+                .into_iter()
+                .filter(|l| l.contains("ERROR:") || l.contains("Error"))
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            let final_err = if !error_msg.is_empty() {
+                error_msg
+            } else {
+                format!("Process exited with code: {}", status)
+            };
+            return Err(anyhow!("Media download failed: {}", final_err));
         }
 
-        Ok(())
+        Ok(final_filepath)
     }
 }
 

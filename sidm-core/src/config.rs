@@ -30,5 +30,8 @@ fn dirs_or_home() -> PathBuf {
 
     let p = base.join("Downloads").join("SIDM");
     let _ = std::fs::create_dir_all(&p);
+    for sub in &["Videos", "Music", "Compressed", "Programs", "Documents"] {
+        let _ = std::fs::create_dir_all(p.join(sub));
+    }
     p
 }

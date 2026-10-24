@@ -35,13 +35,18 @@ cat << 'EOF' > "$STAGING/usr/bin/sidm"
 set -e
 
 if [ "$1" == "stop" ]; then
-    pkill -f "/opt/sidm/sidm-core server" || true
+    pkill -f "sidm-core" || true
     echo "⚡ SIDM Core stopped."
     exit 0
 fi
 
+if [ "$1" == "restart" ]; then
+    pkill -f "sidm-core" || true
+    sleep 0.5
+fi
+
 # Launch daemon in background if not already running
-if ! pgrep -f "/opt/sidm/sidm-core server" >/dev/null 2>&1; then
+if ! pgrep -f "sidm-core server" >/dev/null 2>&1; then
     /opt/sidm/sidm-core server >/dev/null 2>&1 &
     sleep 0.5
 fi
@@ -90,7 +95,7 @@ cp "$STAGING/usr/share/google-chrome/extensions/gadhilaplipaklonafepmbegnhoafice
 # 6. Debian Control File
 cat << 'EOF' > "$STAGING/DEBIAN/control"
 Package: sidm
-Version: 1.0.0
+Version: 1.1.0
 Section: net
 Priority: optional
 Architecture: amd64
@@ -120,7 +125,8 @@ chmod 755 "$STAGING/DEBIAN/postinst"
 chmod 755 "$STAGING/DEBIAN"
 
 # Build DEB
-dpkg-deb --build --root-owner-group "$STAGING" "$DIST/sidm_1.0.0_amd64.deb"
+dpkg-deb --build --root-owner-group "$STAGING" "$DIST/sidm_1.1.0_amd64.deb"
+cp "$DIST/sidm_1.1.0_amd64.deb" "$DIST/sidm_1.0.0_amd64.deb"
 rm -rf "$STAGING"
 
 echo "✅ Linux .deb package created successfully at:"

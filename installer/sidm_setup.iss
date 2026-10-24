@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "SIDM"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "SFIDM Inc."
 #define MyAppURL "https://github.com/kawsarapp/SFIDM"
 #define MyAppExeName "sidm-core.exe"
@@ -22,7 +22,7 @@ DefaultDirName={autopf}\SIDM
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist
-OutputBaseFilename=SIDM_v1.0.0_Setup
+OutputBaseFilename=SIDM_v1.1.0_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -41,8 +41,10 @@ Name: "autostart"; Description: "Automatically launch SIDM when Windows starts";
 Source: "..\sidm-core\target\release\sidm-core.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Browser Integration Extension
 Source: "..\sidm-extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Bundled yt-dlp Video Downloader (if available)
+; Bundled yt-dlp Video Downloader & FFmpeg Video/Audio Merger
 Source: "..\bin\yt-dlp.exe"; DestDir: "{app}\bin"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\bin\ffmpeg.exe"; DestDir: "{app}\bin"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "..\bin\ffprobe.exe"; DestDir: "{app}\bin"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "server"
@@ -51,13 +53,17 @@ Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "server"; Tasks: desktopicon
 
 [Registry]
-; 1. Google Chrome Extension Auto-Registration
+; 1. Google Chrome Extension Auto-Registration & Policy
 Root: HKCU; Subkey: "Software\Google\Chrome\Extensions\{#MyExtId}"; ValueType: string; ValueName: "path"; ValueData: "{app}\extension"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Google\Chrome\Extensions\{#MyExtId}"; ValueType: string; ValueName: "version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Policies\Google\Chrome\ExtensionInstallAllowlist"; ValueType: string; ValueName: "1"; ValueData: "{#MyExtId}"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Policies\Google\Chrome\ExtensionInstallSources"; ValueType: string; ValueName: "1"; ValueData: "<all_urls>"; Flags: uninsdeletevalue
 
-; 2. Microsoft Edge Extension Auto-Registration
+; 2. Microsoft Edge Extension Auto-Registration & Policy
 Root: HKCU; Subkey: "Software\Microsoft\Edge\Extensions\{#MyExtId}"; ValueType: string; ValueName: "path"; ValueData: "{app}\extension"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Microsoft\Edge\Extensions\{#MyExtId}"; ValueType: string; ValueName: "version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Policies\Microsoft\Edge\ExtensionInstallAllowlist"; ValueType: string; ValueName: "1"; ValueData: "{#MyExtId}"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Policies\Microsoft\Edge\ExtensionInstallSources"; ValueType: string; ValueName: "1"; ValueData: "<all_urls>"; Flags: uninsdeletevalue
 
 ; 3. Brave Browser Extension Auto-Registration
 Root: HKCU; Subkey: "Software\BraveSoftware\Brave-Browser\Extensions\{#MyExtId}"; ValueType: string; ValueName: "path"; ValueData: "{app}\extension"; Flags: uninsdeletekey

@@ -28,6 +28,15 @@ echo "🌐 Web Dashboard: http://127.0.0.1:45678"
 echo "🔌 Browser Extension: Load unpacked '$DIR/sidm-extension'"
 echo "--------------------------------------------------"
 
+# Ensure port 45678 is free by terminating any previous instances
+echo "🔄 Stopping previous SIDM instances on port 45678..."
+pkill -f "$BIN" 2>/dev/null || true
+pkill -f "sidm-core server" 2>/dev/null || true
+if command -v fuser >/dev/null 2>&1; then
+  fuser -k 45678/tcp >/dev/null 2>&1 || true
+fi
+sleep 0.5
+
 # Auto-open dashboard window in background
 (
   sleep 1
