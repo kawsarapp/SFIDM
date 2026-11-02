@@ -32,6 +32,9 @@ Write-Host "🌐 Web Dashboard: http://127.0.0.1:45678" -ForegroundColor Yellow
 Write-Host "🔌 Browser Extension: Load unpacked '$ScriptDir\sidm-extension'" -ForegroundColor Yellow
 Write-Host "--------------------------------------------------" -ForegroundColor Gray
 
+# Terminate any previously running instances
+Stop-Process -Name "sidm-core" -Force -ErrorAction SilentlyContinue
+
 # Open browser dashboard
 Start-Process "http://127.0.0.1:45678"
 

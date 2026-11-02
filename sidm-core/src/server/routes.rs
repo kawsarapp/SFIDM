@@ -19,7 +19,7 @@ pub async fn health_check() -> impl IntoResponse {
     Json(json!({
         "status": "ok",
         "app": "SIDM",
-        "version": "1.1.0",
+        "version": "1.1.1",
         "timestamp": chrono::Utc::now().to_rfc3339()
     }))
 }

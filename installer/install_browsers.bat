@@ -22,17 +22,17 @@ echo ----------------------------------------------------------
 :: 1. Google Chrome (User Registry)
 echo [*] Integrating with Google Chrome...
 reg add "HKCU\Software\Google\Chrome\Extensions\%EXT_ID%" /v path /t REG_SZ /d "%EXT_DIR%" /f >nul 2>&1
-reg add "HKCU\Software\Google\Chrome\Extensions\%EXT_ID%" /v version /t REG_SZ /d "1.0.0" /f >nul 2>&1
+reg add "HKCU\Software\Google\Chrome\Extensions\%EXT_ID%" /v version /t REG_SZ /d "1.1.1" /f >nul 2>&1
 
 :: 2. Microsoft Edge (User Registry)
 echo [*] Integrating with Microsoft Edge...
 reg add "HKCU\Software\Microsoft\Edge\Extensions\%EXT_ID%" /v path /t REG_SZ /d "%EXT_DIR%" /f >nul 2>&1
-reg add "HKCU\Software\Microsoft\Edge\Extensions\%EXT_ID%" /v version /t REG_SZ /d "1.0.0" /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Edge\Extensions\%EXT_ID%" /v version /t REG_SZ /d "1.1.1" /f >nul 2>&1
 
 :: 3. Brave Browser (User Registry)
 echo [*] Integrating with Brave Browser...
 reg add "HKCU\Software\BraveSoftware\Brave-Browser\Extensions\%EXT_ID%" /v path /t REG_SZ /d "%EXT_DIR%" /f >nul 2>&1
-reg add "HKCU\Software\BraveSoftware\Brave-Browser\Extensions\%EXT_ID%" /v version /t REG_SZ /d "1.0.0" /f >nul 2>&1
+reg add "HKCU\Software\BraveSoftware\Brave-Browser\Extensions\%EXT_ID%" /v version /t REG_SZ /d "1.1.1" /f >nul 2>&1
 
 :: 4. Windows Startup Autostart (starts SIDM on Windows boot)
 if exist "%BIN_EXE%" (

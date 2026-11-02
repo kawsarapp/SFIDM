@@ -57,7 +57,7 @@ SIDM/
 
 Install the pre-built `.deb` package directly:
 ```bash
-sudo apt install ./dist/sidm_1.1.0_amd64.deb
+sudo apt install ./dist/sidm_1.1.1_amd64.deb
 ```
 This registers **SIDM** in your system applications launcher. You can launch it from your desktop menu or by typing `sidm` in terminal!
 
@@ -84,5 +84,5 @@ The engine starts at:
 
 1. Open your browser and navigate to `chrome://extensions/` (or `edge://extensions/`, `brave://extensions/`).
 2. Toggle on **"Developer mode"** (top right corner).
-3. Click **"Load unpacked"** and select the `sidm-extension` folder inside this repository (or unzip `dist/sidm-extension-v1.1.0.zip`).
+3. Click **"Load unpacked"** and select the `sidm-extension` folder inside this repository (or unzip `dist/sidm-extension-v1.1.1.zip`).
 4. Done! The **⚡ SIDM Turbo Downloader** floating badge will now automatically appear on Facebook, YouTube, TikTok, and video websites!

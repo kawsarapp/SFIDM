@@ -40,8 +40,12 @@ sleep 0.5
 # Auto-open dashboard window in background
 (
   sleep 1
-  if command -v google-chrome >/dev/null 2>&1; then
+  if command -v brave-browser >/dev/null 2>&1; then
+    brave-browser --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
+  elif command -v google-chrome >/dev/null 2>&1; then
     google-chrome --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
+  elif command -v chromium-browser >/dev/null 2>&1; then
+    chromium-browser --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
   elif command -v chromium >/dev/null 2>&1; then
     chromium --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
   elif command -v xdg-open >/dev/null 2>&1; then

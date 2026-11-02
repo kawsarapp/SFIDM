@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "SIDM"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "SFIDM Inc."
 #define MyAppURL "https://github.com/kawsarapp/SFIDM"
 #define MyAppExeName "sidm-core.exe"
@@ -22,12 +22,14 @@ DefaultDirName={autopf}\SIDM
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist
-OutputBaseFilename=SIDM_v1.1.0_Setup
+OutputBaseFilename=SIDM_v1.1.1_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64
+CloseApplications=yes
+CloseApplicationsFilter=sidm-core.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -77,3 +79,17 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\{#MyAppExeName}"; Parameters: "server"; Flags: nowait postinstall skipifsilent
 ; Open Web Dashboard
 Filename: "http://127.0.0.1:45678"; Flags: shellexec nowait postinstall skipifsilent
+
+[UninstallRun]
+; Kill running instance before uninstallation
+Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden
+
+[Code]
+// Gracefully terminate any previous running instance before installing/upgrading
+function InitializeSetup(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := True;
+end;

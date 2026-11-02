@@ -42,6 +42,9 @@ if exist "%DIR%installer\install_browsers.bat" (
 :: Auto-open dashboard in default browser
 start "" "http://127.0.0.1:45678"
 
+:: Ensure any previous instance of SIDM is closed before launch
+taskkill /F /IM sidm-core.exe >nul 2>&1
+
 :: Start SIDM Daemon
 "%BIN%" server
 pause

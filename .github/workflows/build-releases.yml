@@ -56,7 +56,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "dist"
-          $portableDir = "dist/SIDM_v1.1.0_Portable"
+          $portableDir = "dist/SIDM_v1.1.1_Portable"
           New-Item -ItemType Directory -Force -Path $portableDir
           New-Item -ItemType Directory -Force -Path "$portableDir/bin"
           Copy-Item "sidm-core/target/release/sidm-core.exe" "$portableDir/sidm-core.exe"
@@ -67,15 +67,15 @@ jobs:
           Copy-Item "start_sidm.ps1" "$portableDir/start_sidm.ps1"
           Copy-Item -Recurse "sidm-extension" "$portableDir/sidm-extension"
           Copy-Item -Recurse "installer" "$portableDir/installer"
-          Compress-Archive -Path "$portableDir/*" -DestinationPath "dist/SIDM_v1.1.0_Portable_Windows_x64.zip" -Force
+          Compress-Archive -Path "$portableDir/*" -DestinationPath "dist/SIDM_v1.1.1_Portable_Windows_x64.zip" -Force
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-assets
           path: |
-            dist/SIDM_v1.1.0_Setup.exe
-            dist/SIDM_v1.1.0_Portable_Windows_x64.zip
+            dist/SIDM_v1.1.1_Setup.exe
+            dist/SIDM_v1.1.1_Portable_Windows_x64.zip
 
   build-linux:
     name: Build Linux (.deb Package & Tarball)
@@ -105,22 +105,23 @@ jobs:
 
       - name: Create Linux Tarball Package (.tar.gz) & Extension Zip
         run: |
-          mkdir -p dist/sidm_1.1.0_linux_x64
-          cp sidm-core/target/release/sidm-core dist/sidm_1.1.0_linux_x64/
-          cp bin/yt-dlp dist/sidm_1.1.0_linux_x64/
-          cp start_sidm.sh dist/sidm_1.1.0_linux_x64/
-          cp -r sidm-extension dist/sidm_1.1.0_linux_x64/
-          tar -czf dist/sidm_1.1.0_linux_x64.tar.gz -C dist sidm_1.1.0_linux_x64
-          (cd sidm-extension && zip -r ../dist/sidm-extension-v1.1.0.zip ./*)
+          mkdir -p dist/sidm_1.1.1_linux_x64
+          cp sidm-core/target/release/sidm-core dist/sidm_1.1.1_linux_x64/
+          cp bin/yt-dlp dist/sidm_1.1.1_linux_x64/
+          cp start_sidm.sh dist/sidm_1.1.1_linux_x64/
+          cp -r sidm-extension dist/sidm_1.1.1_linux_x64/
+          tar -czf dist/sidm_1.1.1_linux_x64.tar.gz -C dist sidm_1.1.1_linux_x64
+          (cd sidm-extension && zip -r ../dist/sidm-extension-v1.1.1.zip ./*)
 
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-assets
           path: |
+            dist/sidm_1.1.1_amd64.deb
             dist/sidm_1.1.0_amd64.deb
             dist/sidm_1.0.0_amd64.deb
-            dist/sidm_1.1.0_linux_x64.tar.gz
+            dist/sidm_1.1.1_linux_x64.tar.gz
 
   publish-release:
     name: Publish Multi-Platform GitHub Release
@@ -146,14 +147,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.1.0
-          name: "⚡ SIDM v1.1.0 Hybrid Release (Windows & Linux)"
+          tag_name: v1.1.1
+          name: "⚡ SIDM v1.1.1 Hybrid Release (Windows & Linux)"
           body: |
-            ## ⚡ SIDM - Smart Internet Download Manager (v1.1.0)
+            ## ⚡ SIDM - Smart Internet Download Manager (v1.1.1)
 
             Commercial-grade high-speed Internet Download Manager with modern multi-stream acceleration, universal video sniffer, playlist batch downloading, session cookie harvesting, and OS integration.
 
             ### 🚀 Highlights:
+            - **🎯 Universal Zero-Block Stream Engine**: Downloads at up to 16x turbo speeds without hitting YouTube/Facebook 429 rate-limits or bot blocks.
             - **🍪 Active Session Cookie Extractor**: Seamless 1-click downloading of private Facebook groups, reels, stories, age-restricted YouTube, and login-protected platform videos.
             - **📑 Playlist Batch Downloader**: Instant inspection and 1-click batch downloading of full YouTube & social media playlists with uniform resolution picker.
             - **🎯 Universal Zero-Block Stream Engine**: Downloads at up to 16x turbo speeds without hitting YouTube/Facebook 429 rate-limits or bot blocks.
@@ -168,12 +170,12 @@ jobs:
             ### 📥 Downloads:
 
             #### 🪟 Windows (Windows 10 / 11):
-            - **`SIDM_v1.1.0_Setup.exe`** — **Recommended for Windows users**. Single-click installer with automatic browser integration and bundled FFmpeg.
-            - **`SIDM_v1.1.0_Portable_Windows_x64.zip`** — Standalone portable archive (no installation required).
+            - **`SIDM_v1.1.1_Setup.exe`** — **Recommended for Windows users**. Single-click installer with automatic browser integration and bundled FFmpeg.
+            - **`SIDM_v1.1.1_Portable_Windows_x64.zip`** — Standalone portable archive (no installation required).
 
             #### 🐧 Linux (Zorin OS / Ubuntu / Debian / Linux Mint):
-            - **`sidm_1.1.0_amd64.deb`** — **Recommended for Debian/Ubuntu users**. Double-click or `sudo dpkg -i sidm_1.1.0_amd64.deb`.
-            - **`sidm_1.1.0_linux_x64.tar.gz`** — Standalone Linux x64 portable archive.
+            - **`sidm_1.1.1_amd64.deb`** — **Recommended for Debian/Ubuntu users**. Double-click or `sudo dpkg -i sidm_1.1.1_amd64.deb`.
+            - **`sidm_1.1.1_linux_x64.tar.gz`** — Standalone Linux x64 portable archive.
           draft: false
           prerelease: false
           files: |

@@ -7,6 +7,9 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 pub struct MediaEngine;
 
 fn get_ytdlp_bin() -> String {
@@ -99,7 +102,11 @@ fn get_ffmpeg_location() -> Option<String> {
     None
 }
 
-fn apply_cookies(cmd: &mut Command, cookies: Option<&str>) {
+fn apply_cookies(cmd: &mut Command, url: &str, cookies: Option<&str>) {
+    // Never pass browser cookies to YouTube. YouTube web cookies trigger SABR anti-bot 429 rate-limits.
+    if url.contains("youtube.com") || url.contains("youtu.be") {
+        return;
+    }
     if let Some(cookie_str) = cookies {
         let clean = cookie_str.trim().replace('\r', "").replace('\n', "; ");
         if clean.len() > 5 {
@@ -113,16 +120,24 @@ impl MediaEngine {
     pub async fn inspect_playlist(url: &str, cookies: Option<&str>) -> Result<PlaylistInspectResult> {
         let bin = get_ytdlp_bin();
         let mut cmd = Command::new(&bin);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+
         cmd.arg("--flat-playlist")
             .arg("-J")
-            .arg("--no-warnings")
-            .arg(url);
+            .arg("--no-warnings");
+
+        if url.contains("youtube.com") || url.contains("youtu.be") {
+            cmd.arg("--extractor-args").arg("youtube:player_client=android,ios,web");
+        }
+
+        cmd.arg(url);
 
         if let Some(ref ffmpeg_loc) = get_ffmpeg_location() {
             cmd.arg("--ffmpeg-location").arg(ffmpeg_loc);
         }
 
-        apply_cookies(&mut cmd, cookies);
+        apply_cookies(&mut cmd, url, cookies);
 
         let output = cmd.output().await.map_err(|e| {
             anyhow!("Failed to run yt-dlp for playlist inspect ({}): {}", bin, e)
@@ -205,16 +220,24 @@ impl MediaEngine {
     pub async fn inspect(url: &str, cookies: Option<&str>) -> Result<MediaInspectResult> {
         let bin = get_ytdlp_bin();
         let mut cmd = Command::new(&bin);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+
         cmd.arg("--dump-single-json")
             .arg("--no-warnings")
-            .arg("--no-playlist")
-            .arg(url);
+            .arg("--no-playlist");
+
+        if url.contains("youtube.com") || url.contains("youtu.be") {
+            cmd.arg("--extractor-args").arg("youtube:player_client=android,ios,web");
+        }
+
+        cmd.arg(url);
 
         if let Some(ref ffmpeg_loc) = get_ffmpeg_location() {
             cmd.arg("--ffmpeg-location").arg(ffmpeg_loc);
         }
 
-        apply_cookies(&mut cmd, cookies);
+        apply_cookies(&mut cmd, url, cookies);
 
         let output = cmd.output().await.map_err(|e| {
             anyhow!(
@@ -387,6 +410,8 @@ impl MediaEngine {
     {
         let bin = get_ytdlp_bin();
         let mut cmd = Command::new(&bin);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
 
         // Robust format selector (handles YouTube DASH, Facebook, TikTok, Instagram, and single stream MP4s)
         let format_arg = match format_id.unwrap_or("best_1080p") {
@@ -413,18 +438,23 @@ impl MediaEngine {
             .arg("--progress")
             .arg("--windows-filenames")
             .arg("--no-abort-on-error")
-            .arg("--user-agent")
-            .arg("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
             .arg("--print")
             .arg("after_move:filepath")
             .arg("-o")
             .arg(&output_template);
 
+        if url.contains("youtube.com") || url.contains("youtu.be") {
+            cmd.arg("--extractor-args").arg("youtube:player_client=android,ios,web");
+        } else {
+            cmd.arg("--user-agent")
+                .arg("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36");
+        }
+
         if let Some(ref ffmpeg_loc) = get_ffmpeg_location() {
             cmd.arg("--ffmpeg-location").arg(ffmpeg_loc);
         }
 
-        apply_cookies(&mut cmd, cookies);
+        apply_cookies(&mut cmd, url, cookies);
 
         if format_id == Some("best_audio") {
             // Studio-Quality 320kbps MP3

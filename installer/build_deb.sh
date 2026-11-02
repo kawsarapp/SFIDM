@@ -35,24 +35,48 @@ cat << 'EOF' > "$STAGING/usr/bin/sidm"
 set -e
 
 if [ "$1" == "stop" ]; then
-    pkill -f "sidm-core" || true
+    pkill -f "sidm-core" 2>/dev/null || true
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k 45678/tcp >/dev/null 2>&1 || true
+    fi
     echo "⚡ SIDM Core stopped."
     exit 0
 fi
 
 if [ "$1" == "restart" ]; then
-    pkill -f "sidm-core" || true
+    pkill -f "sidm-core" 2>/dev/null || true
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k 45678/tcp >/dev/null 2>&1 || true
+    fi
     sleep 0.5
 fi
 
-# Launch daemon in background if not already running
-if ! pgrep -f "sidm-core server" >/dev/null 2>&1; then
+# Verify running version; restart if outdated or not running
+NEED_START=1
+if pgrep -f "sidm-core server" >/dev/null 2>&1; then
+    RUNNING_VER=$(curl -s --max-time 1 http://127.0.0.1:45678/health 2>/dev/null | grep -o '"version":"[^"]*"' | cut -d'"' -f4 || true)
+    if [ "$RUNNING_VER" == "1.1.1" ]; then
+        NEED_START=0
+    else
+        echo "🔄 Upgrading running SIDM instance to v1.1.1..."
+        pkill -f "sidm-core" 2>/dev/null || true
+        if command -v fuser >/dev/null 2>&1; then
+            fuser -k 45678/tcp >/dev/null 2>&1 || true
+        fi
+        sleep 0.5
+        NEED_START=1
+    fi
+fi
+
+if [ "$NEED_START" -eq 1 ]; then
     /opt/sidm/sidm-core server >/dev/null 2>&1 &
     sleep 0.5
 fi
 
 # Open UI
-if command -v google-chrome >/dev/null 2>&1; then
+if command -v brave-browser >/dev/null 2>&1; then
+    brave-browser --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
+elif command -v google-chrome >/dev/null 2>&1; then
     google-chrome --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
 elif command -v chromium-browser >/dev/null 2>&1; then
     chromium-browser --app=http://127.0.0.1:45678 >/dev/null 2>&1 &
@@ -82,20 +106,22 @@ chmod 644 "$STAGING/usr/share/applications/sidm.desktop"
 cp "$DIR/sidm-extension/icons/icon128.png" "$STAGING/usr/share/icons/hicolor/128x128/apps/sidm.png"
 cp "$DIR/sidm-extension/icons/icon48.png" "$STAGING/usr/share/icons/hicolor/48x48/apps/sidm.png"
 
-# 5. Chrome / Edge Extension Auto-Registration on Linux
-mkdir -p "$STAGING/usr/share/google-chrome/extensions" "$STAGING/usr/share/chromium/extensions"
+# 5. Chrome / Edge / Brave Extension Auto-Registration on Linux
+mkdir -p "$STAGING/usr/share/google-chrome/extensions" "$STAGING/usr/share/chromium/extensions" "$STAGING/usr/share/brave/extensions" "$STAGING/usr/share/brave-browser/extensions"
 cat << 'EOF' > "$STAGING/usr/share/google-chrome/extensions/gadhilaplipaklonafepmbegnhoafice.json"
 {
   "external_crx": "/opt/sidm/extension",
-  "external_version": "1.0.0"
+  "external_version": "1.1.1"
 }
 EOF
 cp "$STAGING/usr/share/google-chrome/extensions/gadhilaplipaklonafepmbegnhoafice.json" "$STAGING/usr/share/chromium/extensions/"
+cp "$STAGING/usr/share/google-chrome/extensions/gadhilaplipaklonafepmbegnhoafice.json" "$STAGING/usr/share/brave/extensions/"
+cp "$STAGING/usr/share/google-chrome/extensions/gadhilaplipaklonafepmbegnhoafice.json" "$STAGING/usr/share/brave-browser/extensions/"
 
 # 6. Debian Control File
 cat << 'EOF' > "$STAGING/DEBIAN/control"
 Package: sidm
-Version: 1.1.0
+Version: 1.1.1
 Section: net
 Priority: optional
 Architecture: amd64
@@ -109,10 +135,27 @@ Description: Smart Internet Download Manager (SIDM)
  floating browser video sniffer, and native Adobe Premiere Pro ready MP4s.
 EOF
 
-# 7. Post-install script
+# 7. Pre-removal script (stops running instance before upgrade/remove)
+cat << 'EOF' > "$STAGING/DEBIAN/prerm"
+#!/bin/sh
+set -e
+pkill -f "sidm-core" 2>/dev/null || true
+if command -v fuser >/dev/null 2>&1; then
+    fuser -k 45678/tcp >/dev/null 2>&1 || true
+fi
+exit 0
+EOF
+chmod 755 "$STAGING/DEBIAN/prerm"
+
+# 8. Post-install script
 cat << 'EOF' > "$STAGING/DEBIAN/postinst"
 #!/bin/sh
 set -e
+# Kill any lingering sidm-core processes from prior installations
+pkill -f "sidm-core" 2>/dev/null || true
+if command -v fuser >/dev/null 2>&1; then
+    fuser -k 45678/tcp >/dev/null 2>&1 || true
+fi
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
 fi
@@ -125,9 +168,10 @@ chmod 755 "$STAGING/DEBIAN/postinst"
 chmod 755 "$STAGING/DEBIAN"
 
 # Build DEB
-dpkg-deb --build --root-owner-group "$STAGING" "$DIST/sidm_1.1.0_amd64.deb"
-cp "$DIST/sidm_1.1.0_amd64.deb" "$DIST/sidm_1.0.0_amd64.deb"
+dpkg-deb --build --root-owner-group "$STAGING" "$DIST/sidm_1.1.1_amd64.deb"
+cp "$DIST/sidm_1.1.1_amd64.deb" "$DIST/sidm_1.1.0_amd64.deb"
+cp "$DIST/sidm_1.1.1_amd64.deb" "$DIST/sidm_1.0.0_amd64.deb"
 rm -rf "$STAGING"
 
 echo "✅ Linux .deb package created successfully at:"
-echo "   $DIST/sidm_1.0.0_amd64.deb"
+echo "   $DIST/sidm_1.1.1_amd64.deb"

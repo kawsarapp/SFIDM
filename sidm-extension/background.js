@@ -3,6 +3,10 @@ const SIDM_API = "http://127.0.0.1:45678";
 // Helper: Extract cookies for target URL or domain (including HttpOnly session cookies)
 async function getCookiesForUrl(urlStr) {
   if (!urlStr || urlStr.startsWith("blob:") || urlStr.startsWith("data:")) return null;
+  // YouTube videos do not need cookies; passing user web cookies triggers YouTube's anti-bot 429 blocks
+  if (urlStr.includes("youtube.com") || urlStr.includes("youtu.be")) {
+    return null;
+  }
   try {
     const urlObj = new URL(urlStr);
     let cookies = await chrome.cookies.getAll({ url: urlStr });

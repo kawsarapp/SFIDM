@@ -648,12 +648,19 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
 "#,
                 fname.replace('"', "")
             );
-            let _ = tokio::process::Command::new("powershell")
-                .arg("-NoProfile")
+            let mut cmd = tokio::process::Command::new("powershell");
+            cmd.arg("-NoProfile")
                 .arg("-NonInteractive")
+                .arg("-WindowStyle")
+                .arg("Hidden")
                 .arg("-Command")
-                .arg(script)
-                .spawn();
+                .arg(script);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+            let _ = cmd.spawn();
         } else if cfg!(target_os = "linux") {
             let body = format!("Saved to: {}", spath);
             let _ = tokio::process::Command::new("notify-send")
