@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "SIDM Integration Module",
+  "version": "1.1.2",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA80ct047SeepPCMrN/d7exK1518juyJ8/ufyqHwgX562A1WiKl9Ba4w+0/2GHU8tQ6JVxdqbLJnjKJQI9T+CIdML2h/elJK26mA+PBy/9qO+2rTxfmmKYqetfL3CazZwvUWb+bxMHHu9Xannd8Ewq3W83BSnSNy6DVXRdxzfdAMOsDXmV9V9CV7xkp26dbLzh4ozW8yTutPw4IvPHWA3cDoZYbng2EGnsmokoqZfgLoYzdoyZ7vI4sAVilq/8xBRLiyL21SpgHv4NzBRqOog86EmhOEQqgCFvbavgiRNWrEBQeEQu+rCldi1t+hK8MbpAr2DBRqKakvxgkQF8qR14OQIDAQAB",
+  "description": "Next-Gen High-Speed Download Manager Integration for SIDM",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus",
+    "cookies",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1:45678/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.facebook.com/*",
+        "*://*.tiktok.com/*",
+        "*://*.instagram.com/*",
+        "*://*.vimeo.com/*",
+        "<all_urls>"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
